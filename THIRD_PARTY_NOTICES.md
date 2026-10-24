@@ -33,6 +33,12 @@ This file lists the third-party open-source components, their licenses, and the 
 - **`egui` & `eframe`**
   - *License*: MIT / Apache-2.0
   - *Purpose*: Immediate-mode, pure-Rust, ultra-lightweight desktop GUI framework for the compact popup editor. Launches in <25ms, requires no webview or Electron runtime, and runs completely offline.
+- **`rfd` (Rust File Dialog)**
+  - *License*: MIT / Apache-2.0
+  - *Purpose*: Native Windows asynchronous file picker dialog used in Morph Editor for selecting PDFs and images to insert.
+- **`winres` (Build Dependency)**
+  - *License*: MIT
+  - *Purpose*: Build-time Windows resource compiler that compiles and embeds the multi-resolution application icon (`logo.ico`) and version metadata into `morph.exe` and `morph-ui.exe`.
 
 ---
 

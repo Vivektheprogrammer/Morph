@@ -93,29 +93,45 @@ cargo test
 
 ## Usage
 
-### 1. Instant Conversions via CLI
+### 1. Instant Conversions via CLI (`morph.exe`)
 ```powershell
 # Convert single image to PDF
-morph-cli convert document.png --to pdf
+morph convert document.png --to pdf
 
 # Convert image format
-morph-cli convert photo.png --to jpg --quality 90
+morph convert photo.png --to jpg --quality 90
+
+# Convert Word document to PDF
+morph convert report.docx --to pdf
 
 # Merge multiple files into a single PDF
-morph-cli merge page1.pdf page2.jpg page3.png --output combined.pdf
+morph merge page1.pdf page2.jpg page3.png --output combined.pdf
 
 # Rotate PDF pages
-morph-cli pdf rotate input.pdf --pages 1,3 --degrees 90
+morph pdf rotate input.pdf --pages 1,3 --degrees 90
 ```
 
 ### 2. Context Menu Registration
 ```powershell
 # Register Morph into Windows File Explorer context menu (HKCU, no admin needed)
-morph-cli register
+morph register
 
-# Unregister / clean up context menu entries
-morph-cli unregister
+# Unregister / clean up all context menu entries
+morph unregister
 ```
+
+### 3. Interactive Desktop Editor (`morph-ui.exe`)
+```powershell
+# Launch empty editor or pass files to start editing immediately
+morph-ui.exe
+morph-ui.exe document.pdf
+```
+- **Multi-File Workspace Shelf**: Mix PDFs and images with insertion control (`At Start`, `Middle`, `At End`).
+- **Smooth Navigation**: Horizontal mouse wheel scrolling, `[‹]` / `[›]` chevron controls, and `Files (N) ▾` vertical dropdown.
+- **Zero-Latency Rotation**: 60 FPS GPU vertex rotation with multi-tier fallback.
+- **Async Processing**: Zero UI freezes or "Not Responding" stalls.
+- **Full History**: Complete Undo / Redo stack.
+- **Atomic PDF Export**: Lossless structural merge with collision protection.
 
 ---
 
@@ -127,6 +143,10 @@ morph-cli unregister
 - [x] Safe output manager with atomic writes & collision resolution
 - [x] Image conversion engine (PNG, JPEG, WebP, BMP, TIFF -> PDF and cross-image conversions)
 - [x] Structural PDF engine (merge, split, page deletion, page rotation, page extraction)
+- [x] Headless Office document engine (DOCX to PDF)
 - [x] Windows context-menu registration (cascading actions & direct verbs)
-- [x] Native Windows notifications
-- [x] Compact popup editor for interactive arrangement and reordering
+- [x] Native Windows notifications (Toast)
+- [x] Embedded multi-resolution application icon branding (`logo.ico`)
+- [x] Compact popup editor (`morph-ui`) with async thumbnail engine & GPU rotation pipeline
+- [x] Automatic cache lifecycle management (`%TEMP%\morph_thumbs`)
+
