@@ -56,6 +56,20 @@ morph pdf rotate document.pdf --pages 1,3 --degrees 90
 
 ---
 
+## Installation & Downloads
+
+Download the latest version for Windows from **[GitHub Releases](https://github.com/Vivektheprogrammer/Morph/releases/latest)**:
+
+* **Windows Installer (Recommended)**: [`MorphSetup-v0.1.0-windows-x64.exe`](https://github.com/Vivektheprogrammer/Morph/releases/latest/download/MorphSetup-v0.1.0-windows-x64.exe)
+  * Sets up File Explorer context menus, Desktop & Start Menu shortcuts, and adds `morph` to your user `PATH`.
+* **Portable Archive**: [`Morph-v0.1.0-windows-x64.zip`](https://github.com/Vivektheprogrammer/Morph/releases/latest/download/Morph-v0.1.0-windows-x64.zip)
+  * Portable zero-install zip with `install.cmd` / `uninstall.cmd` helper scripts.
+
+> [!NOTE]
+> **Windows SmartScreen**: Because Morph is an independent open-source project without an expensive corporate certificate, Windows may initially show a blue *"Windows protected your PC"* prompt. Click **More info** $\rightarrow$ **Run anyway**. Morph is 100% offline, private, and open-source.
+
+---
+
 ## Usage
 
 ### 1. Instant Conversions via CLI (`morph.exe`)
