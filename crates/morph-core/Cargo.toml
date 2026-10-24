@@ -14,5 +14,6 @@ pdf-writer = "0.12"
 lopdf = "0.35"
 miniz_oxide = "0.8"
 tempfile = "3.17"
+winreg = "0.52"
 
 [dev-dependencies]

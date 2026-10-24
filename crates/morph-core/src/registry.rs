@@ -130,15 +130,16 @@ impl ConversionRegistry {
                 requires_editor: true,
                 lossless: true,
             },
+            // 5. Document to PDF (DOCX, DOC, ODT, RTF)
             ConversionOperation {
-                id: "pdf_edit_pages",
-                name: "Edit PDF Pages",
-                description: "Rearrange, rotate, delete, or extract pages from a PDF",
-                source_formats: vec![Format::Pdf],
+                id: "doc_to_pdf",
+                name: "Convert to PDF",
+                description: "Convert Word and office documents directly to PDF with full formatting fidelity",
+                source_formats: vec![Format::Docx, Format::Doc, Format::Odt, Format::Rtf],
                 target_format: Format::Pdf,
                 offline_capable: true,
-                instant_capable: false,
-                requires_editor: true,
+                instant_capable: true,
+                requires_editor: false,
                 lossless: true,
             },
         ];

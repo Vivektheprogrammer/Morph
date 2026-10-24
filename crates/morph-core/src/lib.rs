@@ -7,6 +7,7 @@ pub mod output;
 pub mod registry;
 
 pub use detection::{detect_format_from_bytes, detect_format_from_path};
+pub use engines::document::DocumentEngine;
 pub use engines::image::ImageEngine;
 pub use engines::pdf::PdfEngine;
 pub use error::{MorphError, Result};

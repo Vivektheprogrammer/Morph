@@ -69,16 +69,27 @@ impl OutputManager {
         }
     }
 
-    /// Creates a temporary file in the destination directory to ensure
-    /// atomic renaming on the same filesystem/drive volume.
-    pub fn create_staging_file(destination_dir: &Path) -> Result<NamedTempFile> {
+    /// Creates a temporary file with a specific extension in the destination directory
+    pub fn create_staging_file_with_ext(
+        destination_dir: &Path,
+        extension: &str,
+    ) -> Result<NamedTempFile> {
         if !destination_dir.exists() {
             fs::create_dir_all(destination_dir)?;
         }
+        let clean_ext = extension.trim_start_matches('.');
+        let suffix = format!(".{}", clean_ext);
         let temp = tempfile::Builder::new()
             .prefix(".morph-tmp-")
+            .suffix(&suffix)
             .tempfile_in(destination_dir)?;
         Ok(temp)
+    }
+
+    /// Creates a temporary file in the destination directory to ensure
+    /// atomic renaming on the same filesystem/drive volume.
+    pub fn create_staging_file(destination_dir: &Path) -> Result<NamedTempFile> {
+        Self::create_staging_file_with_ext(destination_dir, "tmp")
     }
 
     /// Validates the staging file and atomically moves it to the final destination.

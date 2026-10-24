@@ -155,3 +155,27 @@ fn test_error_handling_empty_and_missing() {
     let err2 = detect_format_from_path(&missing_file);
     assert!(matches!(err2, Err(MorphError::FileNotFound(_))));
 }
+
+#[test]
+fn test_docx_to_pdf_conversion() {
+    use morph_core::engines::document::DocumentEngine;
+
+    let sample_docx = std::path::PathBuf::from("c:/Morph/test_samples/report.docx");
+    if sample_docx.exists() && DocumentEngine::is_msword_available() {
+        let temp = tempdir().unwrap();
+        let target_docx = temp.path().join("report.docx");
+        fs::copy(&sample_docx, &target_docx).unwrap();
+
+        let options = OutputOptions::default();
+        let pdf_path = DocumentEngine::convert_to_pdf(&target_docx, &options).unwrap();
+
+        assert!(pdf_path.exists());
+        assert_eq!(pdf_path, temp.path().join("report.pdf"));
+
+        let format = detect_format_from_path(&pdf_path).unwrap();
+        assert_eq!(format, Format::Pdf);
+
+        let pages = PdfEngine::page_count(&pdf_path).unwrap();
+        assert!(pages >= 1);
+    }
+}

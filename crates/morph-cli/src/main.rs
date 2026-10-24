@@ -143,7 +143,12 @@ fn handle_convert(args: &[String]) {
     );
 
     let result = if target_format == Format::Pdf {
-        ImageEngine::images_to_pdf(std::slice::from_ref(&input_path), &output_options)
+        match source_format {
+            Format::Docx | Format::Doc | Format::Odt | Format::Rtf | Format::Txt => {
+                morph_core::DocumentEngine::convert_to_pdf(&input_path, &output_options)
+            }
+            _ => ImageEngine::images_to_pdf(std::slice::from_ref(&input_path), &output_options),
+        }
     } else {
         ImageEngine::convert_image(&input_path, &target_format, quality, &output_options)
     };

@@ -2,6 +2,7 @@ use winreg::enums::*;
 use winreg::RegKey;
 
 const IMAGE_EXTENSIONS: &[&str] = &[".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"];
+const DOCUMENT_EXTENSIONS: &[&str] = &[".docx", ".doc", ".rtf", ".odt"];
 
 pub struct ContextMenuManager;
 
@@ -60,7 +61,25 @@ impl ContextMenuManager {
             cmd_edit.set_value("", &format!(r#""{}" edit "%1""#, exe_str))?;
         }
 
-        // 2. Register for PDF files
+        // 2. Register for Document Extensions (Word / Office)
+        for &ext in DOCUMENT_EXTENSIONS {
+            let assoc_path = format!(
+                r"Software\Classes\SystemFileAssociations\{}\shell\Morph",
+                ext
+            );
+            let (morph_key, _) = hkcu.create_subkey(&assoc_path)?;
+            morph_key.set_value("MUIVerb", &"Morph")?;
+            morph_key.set_value("SubCommands", &"")?;
+            morph_key.set_value("Icon", &format!("{},0", exe_str))?;
+
+            // Submenu: Convert to PDF
+            let (pdf_key, _) = morph_key.create_subkey(r"shell\ConvertToPdf")?;
+            pdf_key.set_value("MUIVerb", &"Convert to PDF")?;
+            let (cmd_pdf, _) = pdf_key.create_subkey("command")?;
+            cmd_pdf.set_value("", &format!(r#""{}" convert "%1" --to pdf"#, exe_str))?;
+        }
+
+        // 3. Register for PDF files
         {
             let pdf_assoc_path = r"Software\Classes\SystemFileAssociations\.pdf\shell\Morph";
             let (morph_pdf_key, _) = hkcu.create_subkey(pdf_assoc_path)?;
@@ -92,6 +111,13 @@ impl ContextMenuManager {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
         for &ext in IMAGE_EXTENSIONS {
+            let assoc_path = format!(r"Software\Classes\SystemFileAssociations\{}\shell", ext);
+            if let Ok(shell_key) = hkcu.open_subkey_with_flags(&assoc_path, KEY_ALL_ACCESS) {
+                let _ = shell_key.delete_subkey_all("Morph");
+            }
+        }
+
+        for &ext in DOCUMENT_EXTENSIONS {
             let assoc_path = format!(r"Software\Classes\SystemFileAssociations\{}\shell", ext);
             if let Ok(shell_key) = hkcu.open_subkey_with_flags(&assoc_path, KEY_ALL_ACCESS) {
                 let _ = shell_key.delete_subkey_all("Morph");
