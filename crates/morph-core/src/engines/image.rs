@@ -67,6 +67,10 @@ impl ImageEngine {
                 rgb.put_pixel(x, y, image::Rgb([r, g, b]));
             }
             DynamicImage::ImageRgb8(rgb)
+        } else if target_format == &Format::Ico
+            && (img.width() > 256 || img.height() > 256)
+        {
+            img.resize(256, 256, image::imageops::FilterType::Lanczos3)
         } else {
             img
         };

@@ -23,7 +23,15 @@ $notifier.Show($toast);
             title_escaped, body_escaped
         );
 
-        let _ = Command::new("powershell.exe")
+        #[cfg(windows)]
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let mut cmd = Command::new("powershell.exe");
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let _ = cmd
             .args([
                 "-NoProfile",
                 "-NonInteractive",

@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod windows;
 
 use morph_core::engines::image::ImageEngine;
@@ -9,8 +11,34 @@ use std::env;
 use std::path::PathBuf;
 use windows::{ContextMenuManager, Notifier};
 
+macro_rules! log_info {
+    ($($arg:tt)*) => {{
+        let msg = format!($($arg)*);
+        #[cfg(windows)]
+        {
+            use std::io::Write;
+            if let Ok(mut conout) = std::fs::OpenOptions::new().write(true).open("CONOUT$") {
+                let _ = writeln!(conout, "{}", msg);
+            }
+        }
+    }};
+}
+
+macro_rules! log_err {
+    ($($arg:tt)*) => {{
+        let msg = format!($($arg)*);
+        #[cfg(windows)]
+        {
+            use std::io::Write;
+            if let Ok(mut conout) = std::fs::OpenOptions::new().write(true).open("CONOUT$") {
+                let _ = writeln!(conout, "{}", msg);
+            }
+        }
+    }};
+}
+
 fn print_help() {
-    println!(
+    log_info!(
         r#"Morph - Lightweight, Offline-First Universal File Utility (v{})
 
 USAGE:
@@ -32,6 +60,7 @@ OPTIONS:
 
 EXAMPLES:
     morph convert document.png --to pdf
+    morph convert document.docx --to pdf
     morph convert photo.png --to jpg --quality 90
     morph merge page1.png page2.jpg page3.png --output combined.pdf
     morph pdf rotate scan.pdf --degrees 90
@@ -42,6 +71,15 @@ EXAMPLES:
 }
 
 fn main() {
+    #[cfg(windows)]
+    unsafe {
+        // If run from a console/terminal (PowerShell or cmd), attach to it so CLI output works.
+        // If launched by File Explorer, this fails silently with NO console window appearing!
+        windows_sys::Win32::System::Console::AttachConsole(
+            windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS,
+        );
+    }
+
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         print_help();
@@ -58,7 +96,7 @@ fn main() {
         "status" => handle_status(),
         "help" | "--help" | "-h" => print_help(),
         other => {
-            eprintln!("Unknown command: '{}'. Run 'morph help' for usage.", other);
+            log_err!("Unknown command: '{}'. Run 'morph help' for usage.", other);
             std::process::exit(1);
         }
     }
@@ -66,7 +104,7 @@ fn main() {
 
 fn handle_convert(args: &[String]) {
     if args.is_empty() {
-        eprintln!("Error: Missing input file path.");
+        log_err!("Error: Missing input file path.");
         std::process::exit(1);
     }
 
@@ -106,14 +144,14 @@ fn handle_convert(args: &[String]) {
     }
 
     if target_ext.is_empty() {
-        eprintln!("Error: Target format must be specified with --to <format>.");
+        log_err!("Error: Target format must be specified with --to <format>.");
         std::process::exit(1);
     }
 
     let target_format = match Format::from_extension(&target_ext) {
         Some(f) => f,
         None => {
-            eprintln!("Error: Unsupported target format '{}'.", target_ext);
+            log_err!("Error: Unsupported target format '{}'.", target_ext);
             std::process::exit(1);
         }
     };
@@ -121,7 +159,7 @@ fn handle_convert(args: &[String]) {
     let source_format = match detect_format_from_path(&input_path) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("Error detecting input format: {}", e);
+            log_err!("Error detecting input format: {}", e);
             if notify {
                 Notifier::send_notification("Morph Conversion Failed", &format!("{}", e));
             }
@@ -135,7 +173,7 @@ fn handle_convert(args: &[String]) {
         custom_filename: None,
     };
 
-    println!(
+    log_info!(
         "Converting '{}' ({}) -> {}...",
         input_path.display(),
         source_format,
@@ -155,7 +193,7 @@ fn handle_convert(args: &[String]) {
 
     match result {
         Ok(out_path) => {
-            println!("Success: Generated '{}'", out_path.display());
+            log_info!("Success: Generated '{}'", out_path.display());
             if notify {
                 let file_name = out_path
                     .file_name()
@@ -168,7 +206,7 @@ fn handle_convert(args: &[String]) {
             }
         }
         Err(e) => {
-            eprintln!("Conversion error: {}", e);
+            log_err!("Conversion error: {}", e);
             if notify {
                 Notifier::send_notification("Morph - Conversion Failed", &format!("{}", e));
             }
@@ -179,7 +217,7 @@ fn handle_convert(args: &[String]) {
 
 fn handle_merge(args: &[String]) {
     if args.is_empty() {
-        eprintln!("Error: No input files provided for merge.");
+        log_err!("Error: No input files provided for merge.");
         std::process::exit(1);
     }
 
@@ -209,7 +247,7 @@ fn handle_merge(args: &[String]) {
     }
 
     if input_paths.is_empty() {
-        eprintln!("Error: No valid input files specified.");
+        log_err!("Error: No valid input files specified.");
         std::process::exit(1);
     }
 
@@ -226,22 +264,22 @@ fn handle_merge(args: &[String]) {
     let first_fmt = match detect_format_from_path(&input_paths[0]) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            log_err!("Error: {}", e);
             std::process::exit(1);
         }
     };
 
     let result = if first_fmt == Format::Pdf {
-        println!("Merging {} PDF documents...", input_paths.len());
+        log_info!("Merging {} PDF documents...", input_paths.len());
         PdfEngine::merge_pdfs(&input_paths, &output_options)
     } else {
-        println!("Combining {} images into PDF...", input_paths.len());
+        log_info!("Combining {} images into PDF...", input_paths.len());
         ImageEngine::images_to_pdf(&input_paths, &output_options)
     };
 
     match result {
         Ok(out_path) => {
-            println!("Success: Created '{}'", out_path.display());
+            log_info!("Success: Created '{}'", out_path.display());
             if notify {
                 let name = out_path
                     .file_name()
@@ -254,7 +292,7 @@ fn handle_merge(args: &[String]) {
             }
         }
         Err(e) => {
-            eprintln!("Merge error: {}", e);
+            log_err!("Merge error: {}", e);
             if notify {
                 Notifier::send_notification("Morph - Merge Failed", &format!("{}", e));
             }
@@ -265,14 +303,14 @@ fn handle_merge(args: &[String]) {
 
 fn handle_pdf(args: &[String]) {
     if args.is_empty() {
-        eprintln!("Error: Missing PDF subcommand. Use 'morph pdf rotate' or 'morph pdf delete'.");
+        log_err!("Error: Missing PDF subcommand. Use 'morph pdf rotate' or 'morph pdf delete'.");
         std::process::exit(1);
     }
 
     match args[0].as_str() {
         "rotate" => {
             if args.len() < 2 {
-                eprintln!("Error: Missing PDF file path for rotation.");
+                log_err!("Error: Missing PDF file path for rotation.");
                 std::process::exit(1);
             }
             let file_path = PathBuf::from(&args[1]);
@@ -311,21 +349,21 @@ fn handle_pdf(args: &[String]) {
 
             match PdfEngine::rotate_pages(&file_path, &pages, degrees, &options) {
                 Ok(out) => {
-                    println!("Success: Rotated PDF saved as '{}'", out.display());
+                    log_info!("Success: Rotated PDF saved as '{}'", out.display());
                     Notifier::send_notification(
                         "Morph - PDF Rotated",
                         "Pages successfully rotated",
                     );
                 }
                 Err(e) => {
-                    eprintln!("Rotation error: {}", e);
+                    log_err!("Rotation error: {}", e);
                     std::process::exit(1);
                 }
             }
         }
         "delete" => {
             if args.len() < 2 {
-                eprintln!("Error: Missing PDF file path.");
+                log_err!("Error: Missing PDF file path.");
                 std::process::exit(1);
             }
             let file_path = PathBuf::from(&args[1]);
@@ -351,7 +389,7 @@ fn handle_pdf(args: &[String]) {
             }
 
             if pages.is_empty() {
-                eprintln!("Error: Specify pages to delete with --pages <1,2,...>");
+                log_err!("Error: Specify pages to delete with --pages <1,2,...>");
                 std::process::exit(1);
             }
 
@@ -362,7 +400,7 @@ fn handle_pdf(args: &[String]) {
 
             match PdfEngine::delete_pages(&file_path, &pages, &options) {
                 Ok(out) => {
-                    println!(
+                    log_info!(
                         "Success: Saved PDF after deleting pages as '{}'",
                         out.display()
                     );
@@ -372,13 +410,13 @@ fn handle_pdf(args: &[String]) {
                     );
                 }
                 Err(e) => {
-                    eprintln!("Error: {}", e);
+                    log_err!("Error: {}", e);
                     std::process::exit(1);
                 }
             }
         }
         other => {
-            eprintln!("Unknown PDF command '{}'", other);
+            log_err!("Unknown PDF command '{}'", other);
             std::process::exit(1);
         }
     }
@@ -386,7 +424,7 @@ fn handle_pdf(args: &[String]) {
 
 fn handle_edit(args: &[String]) {
     if args.is_empty() {
-        eprintln!("Error: Missing file path for editor.");
+        log_err!("Error: Missing file path for editor.");
         std::process::exit(1);
     }
     let file_path = PathBuf::from(&args[0]);
@@ -398,7 +436,7 @@ fn handle_edit(args: &[String]) {
     if ui_exe.exists() {
         let _ = std::process::Command::new(ui_exe).arg(&file_path).spawn();
     } else {
-        println!(
+        log_info!(
             "Morph Editor requested for '{}'. (Popup UI will open when morph-ui is built)",
             file_path.display()
         );
@@ -408,13 +446,13 @@ fn handle_edit(args: &[String]) {
 fn handle_register() {
     match ContextMenuManager::register_current_exe() {
         Ok(_) => {
-            println!(
+            log_info!(
                 "Success: Morph context menu successfully registered in Windows File Explorer."
             );
-            println!("Right-click any supported image (.png, .jpg, .webp, .bmp, .tiff) or PDF to access Morph actions!");
+            log_info!("Right-click any supported image (.png, .jpg, .webp, .bmp, .tiff) or PDF to access Morph actions!");
         }
         Err(e) => {
-            eprintln!("Failed to register context menu: {}", e);
+            log_err!("Failed to register context menu: {}", e);
             std::process::exit(1);
         }
     }
@@ -423,21 +461,21 @@ fn handle_register() {
 fn handle_unregister() {
     match ContextMenuManager::unregister() {
         Ok(_) => {
-            println!(
+            log_info!(
                 "Success: Morph context menu successfully removed from Windows File Explorer."
             );
         }
         Err(e) => {
-            eprintln!("Failed to unregister context menu: {}", e);
+            log_err!("Failed to unregister context menu: {}", e);
             std::process::exit(1);
         }
     }
 }
 
 fn handle_status() {
-    println!("Morph Desktop Utility v{}", morph_core::version());
-    println!("Offline capability: 100% Fully Offline (Zero Network / Cloud Dependency)");
-    println!(
+    log_info!("Morph Desktop Utility v{}", morph_core::version());
+    log_info!("Offline capability: 100% Fully Offline (Zero Network / Cloud Dependency)");
+    log_info!(
         "Context Menu Integration: {}",
         if ContextMenuManager::is_registered() {
             "Registered (Active in Windows File Explorer)"
@@ -447,12 +485,12 @@ fn handle_status() {
     );
 
     let reg = ConversionRegistry::new();
-    println!(
+    log_info!(
         "\nRegistered Conversion Capabilities ({} operations):",
         reg.operations().len()
     );
     for op in reg.operations() {
-        println!(
+        log_info!(
             " - [{}] {} -> {:?}",
             op.name, op.description, op.target_format
         );

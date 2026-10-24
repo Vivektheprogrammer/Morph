@@ -276,4 +276,105 @@ impl PdfEngine {
         })?;
         Ok(doc.get_pages().len())
     }
+
+    /// Extracts text snippet from a specific page of a PDF document.
+    pub fn extract_page_text(path: &Path, page: u32) -> Result<String> {
+        let doc = Document::load(path).map_err(|e| {
+            MorphError::PdfError(format!("Failed to load PDF '{}': {}", path.display(), e))
+        })?;
+        let text = doc.extract_text(&[page]).unwrap_or_default();
+        Ok(text)
+    }
+
+    /// Extracts text snippets for all pages in a single fast in-memory pass.
+    pub fn extract_all_page_snippets(path: &Path) -> std::collections::HashMap<u32, String> {
+        let mut snippets = std::collections::HashMap::new();
+        if let Ok(doc) = Document::load(path) {
+            let page_count = doc.get_pages().len();
+            for page in 1..=page_count as u32 {
+                if let Ok(text) = doc.extract_text(&[page]) {
+                    let clean = text.trim().chars().take(280).collect::<String>();
+                    if !clean.is_empty() {
+                        snippets.insert(page, clean);
+                    }
+                }
+            }
+        }
+        snippets
+    }
+
+    /// Universally assembles a single PDF document from an arbitrary list of PageSpecs.
+    /// Can seamlessly combine, reorder, rotate, and merge pages from multiple PDFs and images.
+    pub fn assemble_document(pages: &[PageSpec], output_options: &OutputOptions) -> Result<PathBuf> {
+        if pages.is_empty() {
+            return Err(MorphError::InvalidInput("No pages provided for document assembly".into()));
+        }
+
+        let temp_dir = tempfile::tempdir()?;
+        let temp_dir_path = temp_dir.path();
+        let mut temp_pdf_paths = Vec::new();
+
+        for (i, spec) in pages.iter().enumerate() {
+            let single_pdf = temp_dir_path.join(format!("page_{:04}.pdf", i));
+
+            if spec.is_image {
+                // If image has rotation, rotate it first
+                let img_to_convert = if spec.rotation % 360 != 0 {
+                    let mut img = image::open(&spec.source_path)
+                        .map_err(|e| MorphError::ImageError(e.to_string()))?;
+                    let deg = ((spec.rotation % 360) + 360) % 360;
+                    match deg {
+                        90 => img = img.rotate90(),
+                        180 => img = img.rotate180(),
+                        270 => img = img.rotate270(),
+                        _ => {}
+                    }
+                    let rot_img_path = temp_dir_path.join(format!("rot_img_{:04}.png", i));
+                    img.save(&rot_img_path)
+                        .map_err(|e| MorphError::ImageError(e.to_string()))?;
+                    rot_img_path
+                } else {
+                    spec.source_path.clone()
+                };
+
+                let single_opts = OutputOptions {
+                    overwrite: true,
+                    custom_output_dir: Some(temp_dir_path.to_path_buf()),
+                    custom_filename: Some(format!("page_{:04}.pdf", i)),
+                };
+                crate::engines::image::ImageEngine::images_to_pdf(&[img_to_convert], &single_opts)?;
+                temp_pdf_paths.push(single_pdf);
+            } else {
+                // Extract single page from PDF
+                let single_opts = OutputOptions {
+                    overwrite: true,
+                    custom_output_dir: Some(temp_dir_path.to_path_buf()),
+                    custom_filename: Some(format!("page_{:04}.pdf", i)),
+                };
+                let extracted = Self::reorder_pages(&spec.source_path, &[spec.page_number], &single_opts)?;
+
+                // If rotation is requested, apply it
+                if spec.rotation % 360 != 0 {
+                    let rot_opts = OutputOptions {
+                        overwrite: true,
+                        ..Default::default()
+                    };
+                    Self::rotate_pages(&extracted, &[1], spec.rotation, &rot_opts)?;
+                }
+
+                temp_pdf_paths.push(extracted);
+            }
+        }
+
+        // Merge all single page PDFs into final destination
+        Self::merge_pdfs(&temp_pdf_paths, output_options)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PageSpec {
+    pub source_path: PathBuf,
+    pub page_number: u32,
+    pub is_image: bool,
+    pub rotation: i32,
 }

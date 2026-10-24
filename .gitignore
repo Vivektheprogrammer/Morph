@@ -5,3 +5,4 @@ Cargo.lock
 .morph-tmp-*
 /test_samples/
 test_script.tmp
+*.exe

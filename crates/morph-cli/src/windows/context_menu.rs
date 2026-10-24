@@ -13,6 +13,20 @@ impl ContextMenuManager {
         let exe_str = current_exe.to_str().unwrap_or("morph.exe");
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
+        let icon_file = std::path::PathBuf::from(r"C:\Morph\assets\logo.ico");
+        let icon_str = if icon_file.exists() {
+            icon_file.to_string_lossy().to_string()
+        } else {
+            format!("{},0", exe_str)
+        };
+
+        let ui_exe = current_exe.with_file_name("morph-ui.exe");
+        let edit_cmd = if ui_exe.exists() {
+            format!(r#""{}" "%1""#, ui_exe.to_string_lossy())
+        } else {
+            format!(r#""{}" edit "%1""#, exe_str)
+        };
+
         // 1. Register for Image Extensions
         for &ext in IMAGE_EXTENSIONS {
             let assoc_path = format!(
@@ -22,7 +36,7 @@ impl ContextMenuManager {
             let (morph_key, _) = hkcu.create_subkey(&assoc_path)?;
             morph_key.set_value("MUIVerb", &"Morph")?;
             morph_key.set_value("SubCommands", &"")?;
-            morph_key.set_value("Icon", &format!("{},0", exe_str))?;
+            morph_key.set_value("Icon", &icon_str)?;
 
             // Submenu: Convert to PDF
             let (pdf_key, _) = morph_key.create_subkey(r"shell\ConvertToPdf")?;
@@ -58,7 +72,7 @@ impl ContextMenuManager {
             let (edit_key, _) = morph_key.create_subkey(r"shell\OpenEditor")?;
             edit_key.set_value("MUIVerb", &"Open in Morph Editor...")?;
             let (cmd_edit, _) = edit_key.create_subkey("command")?;
-            cmd_edit.set_value("", &format!(r#""{}" edit "%1""#, exe_str))?;
+            cmd_edit.set_value("", &edit_cmd)?;
         }
 
         // 2. Register for Document Extensions (Word / Office)
@@ -70,7 +84,7 @@ impl ContextMenuManager {
             let (morph_key, _) = hkcu.create_subkey(&assoc_path)?;
             morph_key.set_value("MUIVerb", &"Morph")?;
             morph_key.set_value("SubCommands", &"")?;
-            morph_key.set_value("Icon", &format!("{},0", exe_str))?;
+            morph_key.set_value("Icon", &icon_str)?;
 
             // Submenu: Convert to PDF
             let (pdf_key, _) = morph_key.create_subkey(r"shell\ConvertToPdf")?;
@@ -85,13 +99,13 @@ impl ContextMenuManager {
             let (morph_pdf_key, _) = hkcu.create_subkey(pdf_assoc_path)?;
             morph_pdf_key.set_value("MUIVerb", &"Morph")?;
             morph_pdf_key.set_value("SubCommands", &"")?;
-            morph_pdf_key.set_value("Icon", &format!("{},0", exe_str))?;
+            morph_pdf_key.set_value("Icon", &icon_str)?;
 
             // Submenu: Edit Pages...
             let (edit_key, _) = morph_pdf_key.create_subkey(r"shell\EditPages")?;
             edit_key.set_value("MUIVerb", &"Edit PDF Pages...")?;
             let (cmd_edit, _) = edit_key.create_subkey("command")?;
-            cmd_edit.set_value("", &format!(r#""{}" edit "%1""#, exe_str))?;
+            cmd_edit.set_value("", &edit_cmd)?;
 
             // Submenu: Rotate 90° Clockwise
             let (rot_key, _) = morph_pdf_key.create_subkey(r"shell\Rotate90")?;
@@ -103,6 +117,7 @@ impl ContextMenuManager {
             )?;
         }
 
+        Self::refresh_shell();
         Ok(())
     }
 
@@ -129,7 +144,26 @@ impl ContextMenuManager {
             let _ = shell_key.delete_subkey_all("Morph");
         }
 
+        Self::refresh_shell();
         Ok(())
+    }
+
+    /// Tells Windows Explorer and shell that file associations and icons have changed
+    fn refresh_shell() {
+        #[cfg(windows)]
+        unsafe {
+            #[link(name = "shell32")]
+            extern "system" {
+                fn SHChangeNotify(
+                    w_event_id: i32,
+                    u_flags: u32,
+                    dw_item1: *const std::ffi::c_void,
+                    dw_item2: *const std::ffi::c_void,
+                );
+            }
+            // SHCNE_ASSOCCHANGED = 0x08000000, SHCNF_IDLIST = 0
+            SHChangeNotify(0x08000000, 0, std::ptr::null(), std::ptr::null());
+        }
     }
 
     /// Checks whether Morph is currently registered for .png

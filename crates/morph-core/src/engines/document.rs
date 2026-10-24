@@ -157,7 +157,15 @@ try {{
 "#
         );
 
-        let output = Command::new("powershell.exe")
+        #[cfg(windows)]
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let mut cmd = Command::new("powershell.exe");
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let output = cmd
             .args([
                 "-NoProfile",
                 "-NonInteractive",
@@ -192,7 +200,15 @@ try {{
         staging_output: &Path,
     ) -> Result<()> {
         let temp_dir = staging_output.parent().unwrap_or_else(|| Path::new("."));
-        let output = Command::new(soffice_path)
+        #[cfg(windows)]
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let mut cmd = Command::new(soffice_path);
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let output = cmd
             .args([
                 "--headless",
                 "--convert-to",
