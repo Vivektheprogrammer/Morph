@@ -84,7 +84,7 @@ Windows 11 provides two context menu layers:
   - Converts mouse vertical scroll wheel deltas to horizontal scrolling over chip containers.
   - Interactive `Files (N) ▾` popup dropdown for fast vertical navigation across all loaded files.
 - **Non-Blocking Asynchronous Background Pipeline**:
-  - File loading returns in <10ms by queueing page thumbnail extraction to a dedicated background channel (`thumb_queue_tx`), completely eliminating Windows "Not Responding" UI freezes.
+  - File loading returns in <10ms by queueing page thumbnail extraction to a dedicated background channel (`thumb_queue_tx`), ensuring fluid 60 FPS UI interaction even with large multi-page documents.
   - In-flight preview deduplication (`pending_previews`) ensures zero duplicate renders for concurrent page requests.
 - **Multi-Tier GPU Texture Pipeline**:
   - Employs a 4-tier fallback: dedicated rotated thumbnails -> dedicated rotated previews -> base unrotated thumbnail with GPU vertex rotation (`egui::Image::rotate`) -> base preview with GPU vertex rotation.
@@ -94,4 +94,29 @@ Windows 11 provides two context menu layers:
   - Automatically deletes document preview files upon file removal (`✕`), purges session temporary files upon window exit (`on_exit`), and auto-prunes stale cache files older than 24 hours on startup.
 - **Binary Branding**:
   - Multi-resolution icons (`16px`, `24px`, `32px`, `48px`, `64px`, `128px`, `256px`) embedded directly into PE executables via `winres` at compile time.
+
+### 5. Compression & File Size Optimization Architecture
+
+The compression pipeline in `morph-core` is engineered with a multi-layered architecture balancing lossless structural fidelity and extreme byte reduction:
+
+1. **Lossless Structural Stream Optimization (`lopdf` + `flate2`)**:
+   - Recompresses all internal content streams and object dictionaries using maximum DEFLATE compression levels (`Compression::best()`).
+   - Converts standard cross-reference tables into modern compact Cross-Reference Streams (`/XRef`) and packs non-stream objects into Object Streams (`/ObjStm`, PDF 1.5+).
+   - Traverses the internal object graph from the `/Root` catalog to identify and prune unreferenced/orphan objects, stale metadata streams (`/Metadata`), embedded preview thumbnails (`/Thumb`), and incremental update history.
+
+2. **Raster Downsampling & Modern Re-Encoding Pipeline**:
+   - Scans and extracts embedded `/XObject` image dictionaries (`/Subtype /Image`).
+   - Calculates effective DPI against page bounding boxes and downsamples high-resolution images (300+ DPI) to target resolution thresholds:
+     - **Email / Balanced**: ~150 DPI clamp with ~75% DCT/JPEG quality.
+     - **Screen / Web**: ~96 DPI clamp with ~65% DCT/JPEG quality.
+     - **Maximum Reduction**: ~72 DPI clamp with optional 8-bit grayscale conversion for scanned documents.
+   - Re-encodes raw, uncompressed, or bloated bitmap streams into optimized JPEG or WebP streams.
+
+3. **Target File Size Solver (Bisection Optimization)**:
+   - When a user or agent specifies a strict file size ceiling (e.g. `--target-size 2MB` or UI target box):
+     - Runs a bounded binary search (bisection) over quality (15% to 90%) and scale factors (0.3x to 1.0x).
+     - Rapidly estimates compressed stream sizes in-memory without disk I/O, converging in 3–4 iterations to the highest visual fidelity that remains strictly under the byte limit.
+
+4. **Privacy & Metadata Sanitization**:
+   - Strips non-critical ancillary metadata (EXIF tags, GPS coordinates, author names, printer profiles, software timestamps, and comments), maximizing privacy while saving unnecessary file overhead.
 

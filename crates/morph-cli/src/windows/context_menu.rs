@@ -13,15 +13,30 @@ impl ContextMenuManager {
         let exe_str = current_exe.to_str().unwrap_or("morph.exe");
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
-        let icon_file = std::path::PathBuf::from(r"C:\Morph\assets\logo.ico");
-        let icon_str = if icon_file.exists() {
-            icon_file.to_string_lossy().to_string()
+        let exe_dir = current_exe.parent().unwrap_or(std::path::Path::new("."));
+        let rel_icon = exe_dir.join("assets").join("logo.ico");
+        let local_icon = exe_dir.join("logo.ico");
+        let dev_icon = std::path::PathBuf::from(r"C:\Morph\assets\logo.ico");
+
+        let icon_str = if rel_icon.exists() {
+            rel_icon.to_string_lossy().to_string()
+        } else if local_icon.exists() {
+            local_icon.to_string_lossy().to_string()
+        } else if dev_icon.exists() {
+            dev_icon.to_string_lossy().to_string()
         } else {
             format!("{},0", exe_str)
         };
 
-        let ui_exe = current_exe.with_file_name("morph-ui.exe");
-        let edit_cmd = if ui_exe.exists() {
+        let ui_exe = if current_exe.with_file_name("morph-ui.exe").exists() {
+            current_exe.with_file_name("morph-ui.exe")
+        } else if current_exe.with_file_name("Morph-UI.exe").exists() {
+            current_exe.with_file_name("Morph-UI.exe")
+        } else {
+            current_exe.clone()
+        };
+
+        let edit_cmd = if ui_exe != current_exe {
             format!(r#""{}" "%1""#, ui_exe.to_string_lossy())
         } else {
             format!(r#""{}" edit "%1""#, exe_str)

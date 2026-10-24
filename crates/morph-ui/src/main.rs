@@ -41,7 +41,7 @@ fn get_cache_dir() -> PathBuf {
 
 /// Renders 72 DPI thumbnails asynchronously in a background worker thread.
 /// Also extracts text snippets into snip_{hash}_{page}.txt without blocking.
-/// NEVER blocks the UI event loop -> zero UI freeze, zero "Not Responding" warnings.
+/// NEVER blocks the UI event loop -> fluid 60 FPS interface during multi-page rendering.
 fn render_pdf_thumbnails_bg(pdf_path: PathBuf, cache_dir: PathBuf, hash: u64) {
     let script = format!(
         r#"import fitz, os

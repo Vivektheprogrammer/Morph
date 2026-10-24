@@ -6,3 +6,5 @@ Cargo.lock
 /test_samples/
 test_script.tmp
 *.exe
+/dist/
+*.zip

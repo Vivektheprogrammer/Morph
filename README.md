@@ -1,93 +1,58 @@
-# Morph
+<p align="center">
+  <img src="assets/logo_fluent.png" width="96" height="96" alt="Morph Logo" />
+</p>
 
-> **A Lightweight, Offline-First, Universal File Conversion and Editing Utility**
+<h1 align="center">Morph</h1>
 
-*Select a file. Right-click. Transform it. Done.*
+<p align="center">
+  <strong>A Lightweight, Offline-First, Universal File Conversion & Document Editing Utility</strong>
+</p>
 
-Morph is a lightweight, privacy-focused desktop utility designed to integrate directly into the operating system's file manager (Windows File Explorer). It enables instant file conversions without opening a heavy application window, and provides a compact popup editor when multi-file arrangement or fine-grained editing (such as PDF page reordering, page deletion, rotation, or merging) is required.
+<p align="center">
+  <em>Select a file. Right-click. Transform it. Done.</em>
+</p>
+
+---
+
+## What Morph Can Do
+
+- **Instant Context Menu Conversions**: Convert raster images (`PNG`, `JPEG`, `WebP`, `BMP`, `TIFF`), documents (`DOCX` to `PDF`), and multi-image batches directly from the Windows File Explorer right-click menu.
+- **Interactive Multi-Document Editor (`morph-ui.exe`)**: Open, combine, and arrange multiple PDFs and image files into a single unified workspace with smart insertion controls (`⏮ At Start`, `⏺ Middle`, `⏭ At End`).
+- **Lossless Structural PDF Engine**: Merge, split, reorder, rotate ($90^\circ, 180^\circ, 270^\circ$), and delete pages while preserving vector graphics, fonts, metadata, and selectable text without lossy rasterization.
+- **Ultra-Fast & Asynchronous**: Dedicated background worker threads render thumbnails asynchronously in parallel without blocking the UI event loop.
+- **Zero-Latency GPU Rotation**: 60 FPS GPU-accelerated vertex rotation with a 4-tier texture resolution pipeline ensures thumbnails and document previews never flicker or go blank when rotated.
+- **Safe & Collision-Proof**: Zero accidental overwrites. Employs automatic collision resolution (`file (1).ext`), atomic temporary staging files, and automated cache self-cleaning (`%TEMP%\morph_thumbs`).
+- **Agentic AI & Scripting Ready**: The standalone CLI (`morph.exe`) allows autonomous AI coding agents (Claude, ChatGPT, Antigravity, Copilot, Cursor, etc.) and PowerShell/batch scripts to perform conversions and PDF structural edits programmatically and completely offline.
 
 ---
 
 ## Key Principles
 
-1. **Offline-First & Private**: 100% local execution. No cloud services, no remote APIs, no telemetry, no tracking.
-2. **Instant Native Integration**: Directly accessible via the Windows File Explorer right-click context menu.
-3. **Safe File Operations**: Never overwrites source files without explicit instruction. Employs collision detection (`file (1).ext`) and atomic file finalization.
-4. **Lightweight & Fast**: Pure native Rust core; fast cold start (<50ms for CLI conversions), bounded memory usage, and zero persistent background services.
-5. **Structural Integrity**: Structural PDF manipulation (merge, split, delete, rotate) preserves text, vector paths, and links without lossy rasterization.
-6. **Extensible Architecture**: Decoupled core engine (`morph-core`) ready for future platform integrations (macOS Finder Quick Actions).
+1. **Offline-First & 100% Private**: Zero cloud dependencies, zero remote API calls, zero telemetry, and zero tracking. Everything stays strictly on your local machine.
+2. **Native Windows Shell Integration**: Static registry verbs registered under `HKCU\Software\Classes\SystemFileAssociations` (requires zero administrator privileges, runs zero background services, and incurs zero right-click delay).
+3. **Safe File Operations**: Never overwrites source files without explicit confirmation; uses atomic staging files and collision avoidance.
+4. **Lightweight & Fast**: Pure Rust native binaries with cold starts in <50ms and minimal memory footprint (<40MB RAM).
+5. **Structural Integrity**: Directly manipulates PDF object trees (`lopdf` / `pdf-writer`) rather than converting pages into lossy raster bitmaps.
+6. **Extensible Architecture**: Cleanly decoupled core engine (`morph-core`) ready for future platforms (macOS Finder Quick Actions).
 
 ---
 
-## Workspace Structure
+## Agentic AI & Automation Ready
 
-The project is structured as a modular Cargo workspace:
+Morph is designed from the ground up for both human users and **Autonomous AI Agents**:
 
-```
-Morph/
-├── Cargo.toml                    # Workspace root manifest
-├── ARCHITECTURE.md               # Technical architecture & design decisions
-├── ROADMAP.md                    # Implementation roadmap & phase tracking
-├── THIRD_PARTY_NOTICES.md        # Third-party dependencies & licensing
-├── README.md                     # Project overview & documentation
-├── crates/
-│   ├── morph-core/               # Core library: format detection, registry, engines, job/output managers
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── lib.rs            # Library entrypoint
-│   │       ├── detection.rs      # Format sniffing via magic bytes & extensions
-│   │       ├── format.rs         # Format taxonomy & capabilities
-│   │       ├── registry.rs       # Capability-based conversion registry
-│   │       ├── job.rs            # Job manager & lifecycle states
-│   │       ├── output.rs         # Safe naming, temp writing & atomic finalize
-│   │       ├── error.rs          # Typed domain errors
-│   │       └── engines/          # Conversion engine implementations
-│   │           ├── mod.rs
-│   │           ├── image.rs      # Image format conversions & image-to-PDF
-│   │           └── pdf.rs        # Structural PDF manipulation (merge/split/rotate/page ops)
-│   ├── morph-cli/                # Command-line interface & context menu worker
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── main.rs           # CLI dispatcher & subcommands
-│   │       └── windows/          # Windows shell integration (registry verbs, toast notifications)
-│   │           ├── mod.rs
-│   │           ├── context_menu.rs # Context menu registration/unregistration
-│   │           └── notify.rs     # Native Windows notifications
-│   └── morph-ui/                 # Compact popup editor (for PDF reordering, image combination, etc.)
-│       ├── Cargo.toml
-│       └── src/
-│           └── main.rs
-└── tests/                        # Workspace-wide integration tests
-    ├── image_conversions.rs
-    ├── pdf_operations.rs
-    └── safe_output.rs
-```
-
----
-
-## Development Setup & Prerequisites
-
-### Prerequisites (Windows)
-- **Rust Stable** (1.80+ or latest stable; tested on 1.99.1)
-- **Visual Studio 2022 C++ Build Tools** (MSVC toolchain)
-- **Windows 10/11 SDK** (10.0.19041.0 or higher)
-- **Git**
-
-### Building from Source
+Once installed on your system, any coding assistant or autonomous agent (such as **Antigravity**, **Claude**, **ChatGPT**, **Cursor**, **Copilot**, or **Windsurf**) can immediately execute conversions, merges, page extractions, and PDF transformations using the simple, predictable `morph` CLI.
 
 ```powershell
-# Clone or navigate to the repository
-cd C:\Morph
-
-# Build the entire workspace in debug mode
-cargo build
-
-# Build in release mode (optimized binary)
-cargo build --release
-
-# Run unit and integration tests
-cargo test
+# Autonomous agents and scripts can invoke Morph directly:
+morph convert invoice.png --to pdf
+morph merge section1.pdf section2.pdf --output full_report.pdf
+morph pdf rotate document.pdf --pages 1,3 --degrees 90
 ```
+
+- **Predictable Exit Codes & Stdout**: Clean CLI output designed for machine parsing.
+- **Zero Network Requirement**: Fully functional in air-gapped environments.
+- **Deterministic Atomic Output**: Agents never risk corrupting source files.
 
 ---
 
@@ -98,55 +63,101 @@ cargo test
 # Convert single image to PDF
 morph convert document.png --to pdf
 
-# Convert image format
+# Convert image format with compression quality
 morph convert photo.png --to jpg --quality 90
 
-# Convert Word document to PDF
+# Convert Word document to PDF offline
 morph convert report.docx --to pdf
 
-# Merge multiple files into a single PDF
+# Merge multiple files (PDFs + images) into a single PDF
 morph merge page1.pdf page2.jpg page3.png --output combined.pdf
 
-# Rotate PDF pages
+# Rotate specific PDF pages structurally
 morph pdf rotate input.pdf --pages 1,3 --degrees 90
 ```
 
 ### 2. Context Menu Registration
 ```powershell
-# Register Morph into Windows File Explorer context menu (HKCU, no admin needed)
+# Register Morph into Windows File Explorer context menu (per-user, no admin needed)
 morph register
 
-# Unregister / clean up all context menu entries
+# Unregister / clean up all context menu entries cleanly
 morph unregister
 ```
 
 ### 3. Interactive Desktop Editor (`morph-ui.exe`)
 ```powershell
-# Launch empty editor or pass files to start editing immediately
+# Launch empty editor
 morph-ui.exe
+
+# Open directly with one or more documents
 morph-ui.exe document.pdf
 ```
-- **Multi-File Workspace Shelf**: Mix PDFs and images with insertion control (`At Start`, `Middle`, `At End`).
-- **Smooth Navigation**: Horizontal mouse wheel scrolling, `[‹]` / `[›]` chevron controls, and `Files (N) ▾` vertical dropdown.
-- **Zero-Latency Rotation**: 60 FPS GPU vertex rotation with multi-tier fallback.
-- **Async Processing**: Zero UI freezes or "Not Responding" stalls.
-- **Full History**: Complete Undo / Redo stack.
+- **Workspace Top Shelf**:
+  - Live category pills showing document name, format badge, and page count.
+  - **Click to Jump**: Clicking any file chip selects that document's first page in the main viewer.
+  - **Quick Removal**: Click `✕` to unload all pages of a specific document.
+  - **`Files (N) ▾` Dropdown**: Vertical popup listing all loaded documents with page summaries for fast navigation.
+  - **Horizontal Navigation**: Scroll file chips horizontally using the mouse wheel, click-and-drag, or `[‹]` / `[›]` chevron arrow buttons.
+- **Smart Insertion Points**: Choose where newly added documents are placed:
+  - `⏮ At Start`: Inserts files before Page 1.
+  - `⏺ Middle`: Inserts files immediately after the currently selected page.
+  - `⏭ At End`: Appends files to the end of the document.
+- **Zero-Latency GPU Rotation**: Rotate individual pages ($90^\circ, 180^\circ, 270^\circ$) or entire documents with 60 FPS GPU vertex rotation.
+- **Full History**: Complete Undo / Redo history state stack.
 - **Atomic PDF Export**: Lossless structural merge with collision protection.
 
 ---
 
-## Implementation Status
+## Upcoming Planned Features
 
-- [x] Environment inspection & toolchain configuration (Rust 1.99.1 + MSVC + Win11 SDK)
-- [x] Workspace architecture & foundational documentation
-- [x] `morph-core` format detection & capability registry
-- [x] Safe output manager with atomic writes & collision resolution
-- [x] Image conversion engine (PNG, JPEG, WebP, BMP, TIFF -> PDF and cross-image conversions)
-- [x] Structural PDF engine (merge, split, page deletion, page rotation, page extraction)
-- [x] Headless Office document engine (DOCX to PDF)
-- [x] Windows context-menu registration (cascading actions & direct verbs)
-- [x] Native Windows notifications (Toast)
-- [x] Embedded multi-resolution application icon branding (`logo.ico`)
-- [x] Compact popup editor (`morph-ui`) with async thumbnail engine & GPU rotation pipeline
-- [x] Automatic cache lifecycle management (`%TEMP%\morph_thumbs`)
+| Feature | Description | Target |
+| :--- | :--- | :--- |
+| **PDF Stream & Object Deduplication** | Lossless Flate/Deflate stream recompression, unreferenced object pruning, metadata stripping, and cross-reference stream packing (PDF 1.5+). | Phase 6 |
+| **Raster Downsampling & Modern Re-encoding** | Inspect embedded PDF images and downsample to 150 DPI (Email) or 72 DPI (Web) with modern JPEG/WebP encoding. | Phase 6 |
+| **Target File Size Solver (`--target-size`)** | Automated bisection search algorithm calibrating compression quality and DPI to fit strictly under user limits (e.g. `2MB` for portal uploads). | Phase 6 |
+| **GUI Export Size Estimator & Preset Drawer** | Real-time pre-export file size prediction, quick preset buttons (*Lossless*, *Email 150 DPI*, *Smallest Size*), and sliders in the Morph Editor. | Phase 6 |
+| **Context Menu "Compress / Shrink File"** | Direct right-click Explorer action to compress single or multiple PDFs/images with native toast feedback showing space saved. | Phase 6 |
+| **Visual Drag-and-Drop Reordering** | Drag page thumbnail cards directly within the side rail to drop them into a new sequence visually. | Phase 5.1 |
+| **External File Drag-and-Drop** | Drag PDF and image files directly from Windows File Explorer and drop them into the Morph Editor window. | Phase 5.1 |
+| **Selective Page Export / Split** | Choose specific page ranges to export (e.g. `1-5, 8, 12-15`) or split into separate PDFs per source file. | Phase 5.2 |
+| **Spreadsheets & Presentations Bridge** | Convert Excel (`.xlsx`, `.csv`) and PowerPoint (`.pptx`) documents to PDF offline. | Phase 8 |
+| **Media Transcoding Bridge** | Local video and audio format conversion (MP4, MKV, WebM, MP3, WAV, AAC) via an embedded FFmpeg bridge. | Phase 8 |
+| **Theme Customization** | Light Mode / Dark Mode toggle and automatic matching with the Windows System Accent Color. | Phase 8 |
+| **macOS Adapter** | Finder Quick Actions, native notifications, and macOS menu bar integration. | Phase 9 |
 
+---
+
+## Workspace Structure & Development Setup
+
+### Workspace Layout
+```
+Morph/
+├── Cargo.toml                    # Workspace root manifest
+├── ARCHITECTURE.md               # Technical architecture & design decisions
+├── ROADMAP.md                    # Implementation roadmap & phase tracking
+├── README.md                     # Project overview & documentation
+├── assets/                       # Branding icons (logo.ico, logo_fluent.png)
+├── crates/
+│   ├── morph-core/               # Core library: format detection, registry, engines, job/output managers
+│   ├── morph-cli/                # Command-line interface & context menu worker (morph.exe)
+│   └── morph-ui/                 # Compact popup editor (morph-ui.exe)
+└── tests/                        # Workspace-wide integration tests
+```
+
+### Prerequisites
+- **Rust Stable** (1.80+; tested on 1.99.1)
+- **Visual Studio 2022 C++ Build Tools** (MSVC toolchain)
+- **Windows 10/11 SDK** (10.0.19041.0 or higher)
+
+### Building from Source
+```powershell
+# Clone or navigate to the repository
+cd C:\Morph
+
+# Build the entire workspace in release mode (optimized binaries)
+cargo build --release
+
+# Run unit and integration tests
+cargo test
+```
