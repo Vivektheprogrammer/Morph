@@ -1,0 +1,7 @@
+/target/
+Cargo.lock
+*.tmp
+*.log
+.morph-tmp-*
+/test_samples/
+test_script.tmp

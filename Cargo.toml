@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/morph-core",
+    "crates/morph-cli",
+]
+resolver = "2"
