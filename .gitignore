@@ -8,3 +8,7 @@ test_script.tmp
 *.exe
 /dist/
 *.zip
+*.msi
+*.wixpdb
+installer/.wix/
+/scratch/

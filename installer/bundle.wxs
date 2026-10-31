@@ -1,0 +1,21 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle Name="Morph"
+          Manufacturer="Morph Open Source"
+          Version="0.1.0"
+          UpgradeCode="B98F8425-46D9-4FE7-9F9C-B3061C8B4999"
+          IconSourceFile="..\assets\logo.ico">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+        Theme="hyperlinkLicense"
+        LicenseUrl="https://github.com/Vivektheprogrammer/Morph"
+        LogoFile="..\assets\logo_fluent.png"
+        SuppressOptionsUI="yes" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage SourceFile="..\dist\Morph-v0.1.0-windows-x64.msi" />
+    </Chain>
+  </Bundle>
+</Wix>

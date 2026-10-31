@@ -1,0 +1,119 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Morph"
+           Manufacturer="Morph Open Source"
+           Version="0.1.0"
+           UpgradeCode="E68F8425-46D9-4FE7-9F9C-B3061C8B4907"
+           Scope="perUser">
+
+    <SummaryInformation Description="Morph Universal File Converter and Document Editor"
+                        Manufacturer="Morph Open Source" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed."
+                  AllowSameVersionUpgrades="yes" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="MorphIcon" SourceFile="..\assets\logo.ico" />
+    <Property Id="ARPPRODUCTICON" Value="MorphIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/Vivektheprogrammer/Morph" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/Vivektheprogrammer/Morph" />
+
+    <!-- Default Install Folder: %LocalAppData%\Programs\Morph -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Morph">
+          <Directory Id="AssetsFolder" Name="assets" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Morph" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- Component Group -->
+    <ComponentGroup Id="ProductComponents">
+      <!-- Main GUI Editor -->
+      <Component Id="MorphUiExeComponent" Directory="INSTALLFOLDER" Guid="A3E8B5B1-23F1-4F43-98D1-987654321001">
+        <File Id="MorphUiExe" Source="..\target\release\morph-ui.exe" KeyPath="yes">
+          <!-- Start Menu Shortcut -->
+          <Shortcut Id="StartMenuShortcut"
+                    Directory="ApplicationProgramsFolder"
+                    Name="Morph Editor"
+                    Description="Universal File Converter and PDF Editor"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="MorphIcon"
+                    Advertise="no" />
+          <!-- Desktop Shortcut -->
+          <Shortcut Id="DesktopShortcut"
+                    Directory="DesktopFolder"
+                    Name="Morph Editor"
+                    Description="Universal File Converter and PDF Editor"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="MorphIcon"
+                    Advertise="no" />
+        </File>
+        <RemoveFolder Id="RemoveAppProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+      </Component>
+
+      <!-- CLI Utility -->
+      <Component Id="MorphCliExeComponent" Directory="INSTALLFOLDER" Guid="A3E8B5B1-23F1-4F43-98D1-987654321002">
+        <File Id="MorphCliExe" Source="..\target\release\morph.exe" KeyPath="yes" />
+        <!-- Add to User PATH -->
+        <Environment Id="UserPathEnv"
+                     Name="PATH"
+                     Value="[INSTALLFOLDER]"
+                     Permanent="no"
+                     Part="last"
+                     Action="set"
+                     System="no" />
+      </Component>
+
+      <!-- Asset Files -->
+      <Component Id="LogoIcoComponent" Directory="AssetsFolder" Guid="A3E8B5B1-23F1-4F43-98D1-987654321003">
+        <File Id="LogoIco" Source="..\assets\logo.ico" KeyPath="yes" />
+      </Component>
+
+      <Component Id="LogoPngComponent" Directory="AssetsFolder" Guid="A3E8B5B1-23F1-4F43-98D1-987654321004">
+        <File Id="LogoPng" Source="..\assets\logo_fluent.png" KeyPath="yes" />
+        <RemoveFolder Id="RemoveAssetsFolder" Directory="AssetsFolder" On="uninstall" />
+      </Component>
+
+      <Component Id="ReadmeComponent" Directory="INSTALLFOLDER" Guid="A3E8B5B1-23F1-4F43-98D1-987654321005">
+        <File Id="ReadmeFile" Source="..\README.md" Name="README.txt" KeyPath="yes" />
+        <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Context Menu Registration Custom Actions -->
+    <CustomAction Id="RegisterContextMenu"
+                  FileRef="MorphCliExe"
+                  ExeCommand="register"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <CustomAction Id="UnregisterContextMenu"
+                  FileRef="MorphCliExe"
+                  ExeCommand="unregister"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RegisterContextMenu" After="InstallFiles" Condition="NOT Installed" />
+      <Custom Action="UnregisterContextMenu" Before="RemoveFiles" Condition="Installed AND (REMOVE=&quot;ALL&quot;)" />
+    </InstallExecuteSequence>
+
+    <Feature Id="MainFeature" Title="Morph Application" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+
+    <!-- Optional Modern Installer UI -->
+    <ui:WixUI Id="WixUI_Minimal" />
+  </Package>
+</Wix>
+
