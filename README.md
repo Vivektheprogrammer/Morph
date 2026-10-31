@@ -175,3 +175,17 @@ cargo build --release
 # Run unit and integration tests
 cargo test
 ```
+
+## License
+
+Morph is open-source software licensed under the **[MIT License](LICENSE)**.
+
+Copyright (c) 2026 The Morph Project Contributors. All rights reserved.
+
+
+## License
+
+Morph is open-source software licensed under the **[MIT License](LICENSE)**.
+
+Copyright (c) 2026 The Morph Project Contributors. All rights reserved.
+

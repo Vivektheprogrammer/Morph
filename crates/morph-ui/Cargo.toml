@@ -3,7 +3,7 @@ name = "morph-ui"
 version = "0.1.0"
 edition = "2021"
 description = "Compact native popup editor for Morph"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [dependencies]
 morph-core = { path = "../morph-core" }

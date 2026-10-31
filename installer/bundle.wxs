@@ -9,7 +9,7 @@
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication
         Theme="hyperlinkLicense"
-        LicenseUrl="https://github.com/Vivektheprogrammer/Morph"
+        LicenseUrl="https://github.com/Vivektheprogrammer/Morph/blob/main/LICENSE"
         LogoFile="..\assets\logo_fluent.png"
         SuppressOptionsUI="yes" />
     </BootstrapperApplication>

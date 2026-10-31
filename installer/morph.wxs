@@ -86,6 +86,10 @@
         <File Id="ReadmeFile" Source="..\README.md" Name="README.txt" KeyPath="yes" />
         <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
       </Component>
+
+      <Component Id="LicenseComponent" Directory="INSTALLFOLDER" Guid="A3E8B5B1-23F1-4F43-98D1-987654321006">
+        <File Id="LicenseFile" Source="..\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
+      </Component>
     </ComponentGroup>
 
     <!-- Context Menu Registration Custom Actions -->

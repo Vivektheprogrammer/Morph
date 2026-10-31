@@ -3,7 +3,7 @@ name = "morph-core"
 version = "0.1.0"
 edition = "2021"
 description = "Core conversion engines, registry, format detection, and safe output handling for Morph"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [dependencies]
 thiserror = "2.0"

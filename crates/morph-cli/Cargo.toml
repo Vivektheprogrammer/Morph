@@ -3,7 +3,7 @@ name = "morph-cli"
 version = "0.1.0"
 edition = "2021"
 description = "Command-line interface and Windows context menu worker for Morph"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [dependencies]
 morph-core = { path = "../morph-core" }
