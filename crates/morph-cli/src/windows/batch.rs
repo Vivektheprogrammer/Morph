@@ -21,9 +21,32 @@ extern "system" {
     fn CloseHandle(hObject: HANDLE) -> i32;
 }
 
-/// High-resolution ticket entry sorted chronologically by arrival time.
+#[link(name = "shlwapi")]
+extern "system" {
+    fn StrCmpLogicalW(psz1: *const u16, psz2: *const u16) -> i32;
+}
+
+/// Natural sort comparison using Windows Shell StrCmpLogicalW API.
+/// This matches Windows File Explorer's exact visual item order (e.g. "A" < "B", "file2" < "file10").
+pub fn natural_cmp(a: &Path, b: &Path) -> std::cmp::Ordering {
+    let name_a = a.file_name().unwrap_or_default().to_string_lossy();
+    let name_b = b.file_name().unwrap_or_default().to_string_lossy();
+
+    let wide_a: Vec<u16> = name_a.encode_utf16().chain(std::iter::once(0)).collect();
+    let wide_b: Vec<u16> = name_b.encode_utf16().chain(std::iter::once(0)).collect();
+
+    let res = unsafe { StrCmpLogicalW(wide_a.as_ptr(), wide_b.as_ptr()) };
+    if res < 0 {
+        std::cmp::Ordering::Less
+    } else if res > 0 {
+        std::cmp::Ordering::Greater
+    } else {
+        std::cmp::Ordering::Equal
+    }
+}
+
+/// Ticket entry representing a file in the multi-select batch.
 struct TicketEntry {
-    arrival_nanos: u128,
     file_path: PathBuf,
     ticket_file: PathBuf,
 }
@@ -32,14 +55,17 @@ struct TicketEntry {
 ///
 /// When multiple files are selected in Explorer and a context menu verb is clicked,
 /// Explorer spawns an independent process for each selected file in rapid succession.
+/// Explorer always invokes whichever file was right-clicked / focused FIRST, followed by
+/// the remaining selected items.
 ///
 /// This coordinator elects a Leader process and gracefully finishes Sibling processes:
 /// - Each process writes a microsecond/nanosecond ticket to `%TEMP%\morph_batch_<hash>\`.
 /// - Each process attempts to acquire a named Windows Mutex `Local\Morph_Batch_<hash>`.
 /// - The **Leader** acquires the mutex, enters an active debounce window (120ms idle timeout,
 ///   350ms cap) to allow all sibling processes spawned by Explorer to write their tickets.
-/// - Once the batch settles, the Leader reads all tickets in exact arrival order, cleans up
-///   the ticket files, releases the mutex, and returns `Some(Vec<PathBuf>)`.
+/// - Once the batch settles, the Leader reads all tickets, cleans up the ticket files,
+///   sorts all collected files in Windows File Explorer's natural visual display order
+///   (`StrCmpLogicalW`), releases the mutex, and returns `Some(Vec<PathBuf>)`.
 /// - Each **Sibling** detects that the mutex is already held, recognizes that its ticket
 ///   is safely queued for the Leader, and returns `None` so it can exit code 0 immediately.
 pub fn coordinate_batch(initial_path: &Path, action_tag: &str) -> Option<Vec<PathBuf>> {
@@ -133,31 +159,18 @@ pub fn coordinate_batch(initial_path: &Path, action_tag: &str) -> Option<Vec<Pat
         }
     }
 
-    // 6. Collect all tickets in strict arrival order
+    // 6. Collect all tickets
     let mut tickets = Vec::new();
 
     if let Ok(entries) = fs::read_dir(&batch_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("ticket") {
-                let file_name = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("")
-                    .to_string();
-
-                let nanos = file_name
-                    .split('_')
-                    .next()
-                    .and_then(|s| s.parse::<u128>().ok())
-                    .unwrap_or(0);
-
                 if let Ok(content) = fs::read_to_string(&path) {
                     let trimmed = content.trim();
                     if !trimmed.is_empty() {
                         let target_path = PathBuf::from(trimmed);
                         tickets.push(TicketEntry {
-                            arrival_nanos: nanos,
                             file_path: target_path,
                             ticket_file: path,
                         });
@@ -166,9 +179,6 @@ pub fn coordinate_batch(initial_path: &Path, action_tag: &str) -> Option<Vec<Pat
             }
         }
     }
-
-    // Sort tickets strictly by arrival time
-    tickets.sort_by_key(|t| t.arrival_nanos);
 
     // Clean up ticket files
     for t in &tickets {
@@ -182,7 +192,7 @@ pub fn coordinate_batch(initial_path: &Path, action_tag: &str) -> Option<Vec<Pat
     }
     let _ = fs::remove_dir(&batch_dir);
 
-    // Deduplicate while strictly preserving arrival order
+    // Deduplicate while preserving files
     let mut seen = std::collections::HashSet::new();
     let mut collected = Vec::new();
     for t in tickets {
@@ -194,6 +204,9 @@ pub fn coordinate_batch(initial_path: &Path, action_tag: &str) -> Option<Vec<Pat
             collected.push(t.file_path);
         }
     }
+
+    // Sort collected files strictly in Windows File Explorer natural display order (A before B, 1 before 2)
+    collected.sort_by(|a, b| natural_cmp(a, b));
 
     if collected.is_empty() {
         Some(vec![initial_path.to_path_buf()])
@@ -219,6 +232,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_natural_sort_ordering() {
+        let file_a = Path::new(r"C:\test\A.png");
+        let file_b = Path::new(r"C:\test\B.png");
+        assert_eq!(natural_cmp(file_a, file_b), std::cmp::Ordering::Less);
+        assert_eq!(natural_cmp(file_b, file_a), std::cmp::Ordering::Greater);
+
+        let file_2 = Path::new(r"C:\test\img2.jpg");
+        let file_10 = Path::new(r"C:\test\img10.jpg");
+        assert_eq!(natural_cmp(file_2, file_10), std::cmp::Ordering::Less);
+    }
+
+    #[test]
     fn test_coordinate_batch_single() {
         let temp = std::env::temp_dir().join("morph_test_single");
         let _ = fs::create_dir_all(&temp);
@@ -241,26 +266,27 @@ mod tests {
         let _ = fs::write(&file_a, b"a");
         let _ = fs::write(&file_b, b"b");
 
-        let fa_clone = file_a.clone();
-        let handle_a = std::thread::spawn(move || {
-            coordinate_batch(&fa_clone, "test_concurrent")
-        });
-
-        // Sibling arrives 25ms later
-        std::thread::sleep(Duration::from_millis(25));
+        // Spawn B first (simulating user right-clicking on B)
         let fb_clone = file_b.clone();
         let handle_b = std::thread::spawn(move || {
             coordinate_batch(&fb_clone, "test_concurrent")
         });
 
-        let res_a = handle_a.join().unwrap();
+        // Sibling A arrives 25ms later
+        std::thread::sleep(Duration::from_millis(25));
+        let fa_clone = file_a.clone();
+        let handle_a = std::thread::spawn(move || {
+            coordinate_batch(&fa_clone, "test_concurrent")
+        });
+
         let res_b = handle_b.join().unwrap();
+        let res_a = handle_a.join().unwrap();
 
         // One of them is the leader (Some), one is the sibling (None)
-        let leader_res = res_a.or(res_b).expect("At least one process must be elected leader");
+        let leader_res = res_b.or(res_a).expect("At least one process must be elected leader");
         assert_eq!(leader_res.len(), 2);
+        // Even though B was launched first by right-click, natural sort puts A first and B second!
         assert_eq!(leader_res[0], file_a);
         assert_eq!(leader_res[1], file_b);
     }
 }
-
