@@ -63,7 +63,7 @@ fn test_image_to_pdf_multiple() {
         ImageEngine::images_to_pdf(&[img1.clone(), img2.clone(), img3.clone()], &options).unwrap();
 
     assert!(pdf_path.exists());
-    assert_eq!(pdf_path, temp.path().join("page1.pdf"));
+    assert_eq!(pdf_path, temp.path().join("page_merged.pdf"));
 
     let pages = PdfEngine::page_count(&pdf_path).unwrap();
     assert_eq!(pages, 3);

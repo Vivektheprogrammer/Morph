@@ -109,8 +109,11 @@ impl ImageEngine {
             ));
         }
 
-        let first_image = &image_paths[0];
-        let destination = OutputManager::resolve_destination(first_image, "pdf", output_options)?;
+        let destination = if image_paths.len() > 1 {
+            OutputManager::resolve_merge_destination(image_paths, "pdf", output_options)?
+        } else {
+            OutputManager::resolve_destination(&image_paths[0], "pdf", output_options)?
+        };
 
         let staging = OutputManager::create_staging_file(
             destination.parent().unwrap_or_else(|| Path::new(".")),

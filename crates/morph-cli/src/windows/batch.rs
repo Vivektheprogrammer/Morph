@@ -27,13 +27,13 @@ extern "system" {
 }
 
 /// Natural sort comparison using Windows Shell StrCmpLogicalW API.
-/// This matches Windows File Explorer's exact visual item order (e.g. "A" < "B", "file2" < "file10").
+/// This matches Windows File Explorer's exact visual item order (e.g. "A" < "B", "file2" < "file10", "invoice" < "invoice (1)").
 pub fn natural_cmp(a: &Path, b: &Path) -> std::cmp::Ordering {
-    let name_a = a.file_name().unwrap_or_default().to_string_lossy();
-    let name_b = b.file_name().unwrap_or_default().to_string_lossy();
+    let stem_a = a.file_stem().unwrap_or_default().to_string_lossy();
+    let stem_b = b.file_stem().unwrap_or_default().to_string_lossy();
 
-    let wide_a: Vec<u16> = name_a.encode_utf16().chain(std::iter::once(0)).collect();
-    let wide_b: Vec<u16> = name_b.encode_utf16().chain(std::iter::once(0)).collect();
+    let wide_a: Vec<u16> = stem_a.encode_utf16().chain(std::iter::once(0)).collect();
+    let wide_b: Vec<u16> = stem_b.encode_utf16().chain(std::iter::once(0)).collect();
 
     let res = unsafe { StrCmpLogicalW(wide_a.as_ptr(), wide_b.as_ptr()) };
     if res < 0 {
@@ -41,7 +41,121 @@ pub fn natural_cmp(a: &Path, b: &Path) -> std::cmp::Ordering {
     } else if res > 0 {
         std::cmp::Ordering::Greater
     } else {
-        std::cmp::Ordering::Equal
+        // If stems are identical, compare extensions
+        let ext_a = a.extension().unwrap_or_default().to_string_lossy();
+        let ext_b = b.extension().unwrap_or_default().to_string_lossy();
+        let wide_ext_a: Vec<u16> = ext_a.encode_utf16().chain(std::iter::once(0)).collect();
+        let wide_ext_b: Vec<u16> = ext_b.encode_utf16().chain(std::iter::once(0)).collect();
+        let ext_res = unsafe { StrCmpLogicalW(wide_ext_a.as_ptr(), wide_ext_b.as_ptr()) };
+        if ext_res < 0 {
+            std::cmp::Ordering::Less
+        } else if ext_res > 0 {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Equal
+        }
+    }
+}
+
+fn is_front_indicator(token: &str) -> bool {
+    let lower = token.to_lowercase();
+    matches!(
+        lower.as_str(),
+        "f" | "front" | "fore" | "frontside" | "recto" | "p1" | "page1" | "side1" | "part1"
+    )
+}
+
+fn is_back_indicator(token: &str) -> bool {
+    let lower = token.to_lowercase();
+    matches!(
+        lower.as_str(),
+        "b" | "back" | "rear" | "backside" | "verso" | "p2" | "page2" | "side2" | "part2"
+    )
+}
+
+/// Checks if stem_a and stem_b have a common base and differ by front/back indicators.
+/// Returns Ordering::Less if a is front and b is back.
+/// Returns Ordering::Greater if a is back and b is front.
+/// Returns None if not a front/back pair.
+fn check_front_back_pair(stem_a: &str, stem_b: &str) -> Option<std::cmp::Ordering> {
+    let tokens_a: Vec<&str> = stem_a
+        .split(|c: char| c.is_whitespace() || c == '_' || c == '-')
+        .filter(|s| !s.is_empty())
+        .collect();
+    let tokens_b: Vec<&str> = stem_b
+        .split(|c: char| c.is_whitespace() || c == '_' || c == '-')
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // Check last tokens (e.g. "adhar f" vs "adhar b", "id_front" vs "id_back")
+    if let (Some(&last_a), Some(&last_b)) = (tokens_a.last(), tokens_b.last()) {
+        if is_front_indicator(last_a) && is_back_indicator(last_b) {
+            let prefix_a = &tokens_a[..tokens_a.len() - 1];
+            let prefix_b = &tokens_b[..tokens_b.len() - 1];
+            if prefix_a.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>()
+                == prefix_b.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>()
+            {
+                return Some(std::cmp::Ordering::Less);
+            }
+        } else if is_back_indicator(last_a) && is_front_indicator(last_b) {
+            let prefix_a = &tokens_a[..tokens_a.len() - 1];
+            let prefix_b = &tokens_b[..tokens_b.len() - 1];
+            if prefix_a.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>()
+                == prefix_b.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>()
+            {
+                return Some(std::cmp::Ordering::Greater);
+            }
+        }
+    }
+
+    // Check first tokens (e.g. "front_id" vs "back_id")
+    if let (Some(&first_a), Some(&first_b)) = (tokens_a.first(), tokens_b.first()) {
+        if is_front_indicator(first_a) && is_back_indicator(first_b) {
+            let suffix_a = &tokens_a[1..];
+            let suffix_b = &tokens_b[1..];
+            if suffix_a.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>()
+                == suffix_b.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>()
+            {
+                return Some(std::cmp::Ordering::Less);
+            }
+        } else if is_back_indicator(first_a) && is_front_indicator(first_b) {
+            let suffix_a = &tokens_a[1..];
+            let suffix_b = &tokens_b[1..];
+            if suffix_a.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>()
+                == suffix_b.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>()
+            {
+                return Some(std::cmp::Ordering::Greater);
+            }
+        }
+    }
+
+    None
+}
+
+/// Document-aware natural sort comparison.
+/// First respects semantic Front/Back pairing (Front always precedes Back).
+/// Otherwise falls back to Windows Shell StrCmpLogicalW natural sort.
+pub fn document_natural_cmp(a: &Path, b: &Path) -> std::cmp::Ordering {
+    let stem_a = a.file_stem().unwrap_or_default().to_string_lossy();
+    let stem_b = b.file_stem().unwrap_or_default().to_string_lossy();
+
+    if let Some(ord) = check_front_back_pair(&stem_a, &stem_b) {
+        return ord;
+    }
+
+    natural_cmp(a, b)
+}
+
+/// Appends a debug message to %TEMP%\morph_batch.log
+pub fn log_batch_debug(msg: &str) {
+    let temp_log = std::env::temp_dir().join("morph_batch.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(temp_log) {
+        use std::io::Write;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let _ = writeln!(f, "[{} | pid {}] {}", now, std::process::id(), msg);
     }
 }
 
@@ -205,8 +319,14 @@ pub fn coordinate_batch(initial_path: &Path, action_tag: &str) -> Option<Vec<Pat
         }
     }
 
-    // Sort collected files strictly in Windows File Explorer natural display order (A before B, 1 before 2)
-    collected.sort_by(|a, b| natural_cmp(a, b));
+    // Sort collected files strictly in document natural display order (Front before Back, A before B, 1 before 2)
+    collected.sort_by(|a, b| document_natural_cmp(a, b));
+
+    log_batch_debug(&format!(
+        "Leader resolved batch with {} files: {:?}",
+        collected.len(),
+        collected
+    ));
 
     if collected.is_empty() {
         Some(vec![initial_path.to_path_buf()])
@@ -241,6 +361,24 @@ mod tests {
         let file_2 = Path::new(r"C:\test\img2.jpg");
         let file_10 = Path::new(r"C:\test\img10.jpg");
         assert_eq!(natural_cmp(file_2, file_10), std::cmp::Ordering::Less);
+
+        let f1 = Path::new(r"C:\test\invoice.pdf");
+        let f2 = Path::new(r"C:\test\invoice (1).pdf");
+        assert_eq!(natural_cmp(f1, f2), std::cmp::Ordering::Less);
+
+        // Document natural sort (Front vs Back semantic awareness)
+        let adhar_f = Path::new(r"C:\test\adhar f.jpg");
+        let adhar_b = Path::new(r"C:\test\adhar b.jpg");
+        assert_eq!(document_natural_cmp(adhar_f, adhar_b), std::cmp::Ordering::Less);
+        assert_eq!(document_natural_cmp(adhar_b, adhar_f), std::cmp::Ordering::Greater);
+
+        let id_front = Path::new(r"C:\test\id_front.png");
+        let id_back = Path::new(r"C:\test\id_back.png");
+        assert_eq!(document_natural_cmp(id_front, id_back), std::cmp::Ordering::Less);
+
+        let card_front = Path::new(r"C:\test\front_card.jpg");
+        let card_back = Path::new(r"C:\test\back_card.jpg");
+        assert_eq!(document_natural_cmp(card_front, card_back), std::cmp::Ordering::Less);
     }
 
     #[test]

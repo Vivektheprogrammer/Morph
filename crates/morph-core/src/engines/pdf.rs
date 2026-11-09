@@ -15,8 +15,11 @@ impl PdfEngine {
             ));
         }
 
-        let destination =
-            OutputManager::resolve_destination(&input_paths[0], "pdf", output_options)?;
+        let destination = if input_paths.len() > 1 {
+            OutputManager::resolve_merge_destination(input_paths, "pdf", output_options)?
+        } else {
+            OutputManager::resolve_destination(&input_paths[0], "pdf", output_options)?
+        };
 
         // If only 1 PDF is provided, copy/finalize directly
         if input_paths.len() == 1 {
@@ -311,7 +314,12 @@ impl PdfEngine {
             return Err(MorphError::InvalidInput("No pages provided for document assembly".into()));
         }
 
-        let destination = OutputManager::resolve_destination(&pages[0].source_path, "pdf", output_options)?;
+        let sources: Vec<PathBuf> = pages.iter().map(|p| p.source_path.clone()).collect();
+        let destination = if pages.len() > 1 {
+            OutputManager::resolve_merge_destination(&sources, "pdf", output_options)?
+        } else {
+            OutputManager::resolve_destination(&pages[0].source_path, "pdf", output_options)?
+        };
 
         let temp_dir = tempfile::tempdir()?;
         let temp_dir_path = temp_dir.path();
