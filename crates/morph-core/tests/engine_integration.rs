@@ -179,3 +179,36 @@ fn test_docx_to_pdf_conversion() {
         assert!(pages >= 1);
     }
 }
+
+#[test]
+fn test_merge_all_files_preserves_order() {
+    let temp = tempdir().unwrap();
+    let img1 = temp.path().join("first_img.png");
+    let img2 = temp.path().join("second_img.jpg");
+    create_sample_png(&img1, 100, 100);
+    create_sample_jpg(&img2, 120, 120);
+
+    let options = OutputOptions::default();
+
+    // 1. Convert img1 to single-page PDF to use as an input PDF
+    let pdf1 = ImageEngine::images_to_pdf(&[img1.clone()], &options).unwrap();
+    assert_eq!(PdfEngine::page_count(&pdf1).unwrap(), 1);
+
+    // 2. Now call PdfEngine::merge_all_files with [pdf1, img2]
+    let merged_options = OutputOptions {
+        custom_filename: Some("merged_doc.pdf".to_string()),
+        ..Default::default()
+    };
+    let merged_pdf = PdfEngine::merge_all_files(&[pdf1.clone(), img2.clone()], &merged_options).unwrap();
+    assert!(merged_pdf.exists());
+    assert_eq!(PdfEngine::page_count(&merged_pdf).unwrap(), 2);
+
+    // 3. Reverse order: [img2, pdf1]
+    let rev_options = OutputOptions {
+        custom_filename: Some("reversed_doc.pdf".to_string()),
+        ..Default::default()
+    };
+    let rev_pdf = PdfEngine::merge_all_files(&[img2, pdf1], &rev_options).unwrap();
+    assert!(rev_pdf.exists());
+    assert_eq!(PdfEngine::page_count(&rev_pdf).unwrap(), 2);
+}

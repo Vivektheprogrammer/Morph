@@ -28,19 +28,9 @@ impl ContextMenuManager {
             format!("{},0", exe_str)
         };
 
-        let ui_exe = if current_exe.with_file_name("morph-ui.exe").exists() {
-            current_exe.with_file_name("morph-ui.exe")
-        } else if current_exe.with_file_name("Morph-UI.exe").exists() {
-            current_exe.with_file_name("Morph-UI.exe")
-        } else {
-            current_exe.clone()
-        };
-
-        let edit_cmd = if ui_exe != current_exe {
-            format!(r#""{}" "%1""#, ui_exe.to_string_lossy())
-        } else {
-            format!(r#""{}" edit "%1""#, exe_str)
-        };
+        // Always route editor calls through morph edit "%1" so the batch coordinator
+        // can group multi-file selections into a single unified editor window.
+        let edit_cmd = format!(r#""{}" edit "%1""#, exe_str);
 
         // 1. Register for Image Extensions
         for &ext in IMAGE_EXTENSIONS {
@@ -52,10 +42,12 @@ impl ContextMenuManager {
             morph_key.set_value("MUIVerb", &"Morph")?;
             morph_key.set_value("SubCommands", &"")?;
             morph_key.set_value("Icon", &icon_str)?;
+            morph_key.set_value("MultiSelectModel", &"Player")?;
 
-            // Submenu: Convert to PDF
+            // Submenu: Convert to PDF (merges multiple selected images into 1 PDF)
             let (pdf_key, _) = morph_key.create_subkey(r"shell\ConvertToPdf")?;
             pdf_key.set_value("MUIVerb", &"Convert to PDF")?;
+            pdf_key.set_value("MultiSelectModel", &"Player")?;
             let (cmd_pdf, _) = pdf_key.create_subkey("command")?;
             cmd_pdf.set_value("", &format!(r#""{}" convert "%1" --to pdf"#, exe_str))?;
 
@@ -63,6 +55,7 @@ impl ContextMenuManager {
             if ext != ".png" {
                 let (png_key, _) = morph_key.create_subkey(r"shell\ConvertToPng")?;
                 png_key.set_value("MUIVerb", &"Convert to PNG")?;
+                png_key.set_value("MultiSelectModel", &"Player")?;
                 let (cmd_png, _) = png_key.create_subkey("command")?;
                 cmd_png.set_value("", &format!(r#""{}" convert "%1" --to png"#, exe_str))?;
             }
@@ -71,6 +64,7 @@ impl ContextMenuManager {
             if ext != ".jpg" && ext != ".jpeg" {
                 let (jpg_key, _) = morph_key.create_subkey(r"shell\ConvertToJpg")?;
                 jpg_key.set_value("MUIVerb", &"Convert to JPG")?;
+                jpg_key.set_value("MultiSelectModel", &"Player")?;
                 let (cmd_jpg, _) = jpg_key.create_subkey("command")?;
                 cmd_jpg.set_value("", &format!(r#""{}" convert "%1" --to jpg"#, exe_str))?;
             }
@@ -79,6 +73,7 @@ impl ContextMenuManager {
             if ext != ".webp" {
                 let (webp_key, _) = morph_key.create_subkey(r"shell\ConvertToWebp")?;
                 webp_key.set_value("MUIVerb", &"Convert to WebP")?;
+                webp_key.set_value("MultiSelectModel", &"Player")?;
                 let (cmd_webp, _) = webp_key.create_subkey("command")?;
                 cmd_webp.set_value("", &format!(r#""{}" convert "%1" --to webp"#, exe_str))?;
             }
@@ -86,6 +81,7 @@ impl ContextMenuManager {
             // Submenu: Open in Morph Editor
             let (edit_key, _) = morph_key.create_subkey(r"shell\OpenEditor")?;
             edit_key.set_value("MUIVerb", &"Open in Morph Editor...")?;
+            edit_key.set_value("MultiSelectModel", &"Player")?;
             let (cmd_edit, _) = edit_key.create_subkey("command")?;
             cmd_edit.set_value("", &edit_cmd)?;
         }
@@ -100,10 +96,12 @@ impl ContextMenuManager {
             morph_key.set_value("MUIVerb", &"Morph")?;
             morph_key.set_value("SubCommands", &"")?;
             morph_key.set_value("Icon", &icon_str)?;
+            morph_key.set_value("MultiSelectModel", &"Player")?;
 
             // Submenu: Convert to PDF
             let (pdf_key, _) = morph_key.create_subkey(r"shell\ConvertToPdf")?;
             pdf_key.set_value("MUIVerb", &"Convert to PDF")?;
+            pdf_key.set_value("MultiSelectModel", &"Player")?;
             let (cmd_pdf, _) = pdf_key.create_subkey("command")?;
             cmd_pdf.set_value("", &format!(r#""{}" convert "%1" --to pdf"#, exe_str))?;
         }
@@ -115,16 +113,26 @@ impl ContextMenuManager {
             morph_pdf_key.set_value("MUIVerb", &"Morph")?;
             morph_pdf_key.set_value("SubCommands", &"")?;
             morph_pdf_key.set_value("Icon", &icon_str)?;
+            morph_pdf_key.set_value("MultiSelectModel", &"Player")?;
+
+            // Submenu: Merge PDFs
+            let (merge_key, _) = morph_pdf_key.create_subkey(r"shell\MergePdfs")?;
+            merge_key.set_value("MUIVerb", &"Merge PDFs")?;
+            merge_key.set_value("MultiSelectModel", &"Player")?;
+            let (cmd_merge, _) = merge_key.create_subkey("command")?;
+            cmd_merge.set_value("", &format!(r#""{}" convert "%1" --to pdf"#, exe_str))?;
 
             // Submenu: Edit Pages...
             let (edit_key, _) = morph_pdf_key.create_subkey(r"shell\EditPages")?;
             edit_key.set_value("MUIVerb", &"Edit PDF Pages...")?;
+            edit_key.set_value("MultiSelectModel", &"Player")?;
             let (cmd_edit, _) = edit_key.create_subkey("command")?;
             cmd_edit.set_value("", &edit_cmd)?;
 
             // Submenu: Rotate 90° Clockwise
             let (rot_key, _) = morph_pdf_key.create_subkey(r"shell\Rotate90")?;
             rot_key.set_value("MUIVerb", &"Rotate 90° Clockwise")?;
+            rot_key.set_value("MultiSelectModel", &"Player")?;
             let (cmd_rot, _) = rot_key.create_subkey("command")?;
             cmd_rot.set_value(
                 "",

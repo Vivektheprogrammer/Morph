@@ -8,8 +8,8 @@ use morph_core::format::Format;
 use morph_core::output::OutputOptions;
 use morph_core::{detect_format_from_path, ConversionRegistry};
 use std::env;
-use std::path::PathBuf;
-use windows::{ContextMenuManager, Notifier};
+use std::path::{Path, PathBuf};
+use windows::{coordinate_batch, ContextMenuManager, Notifier};
 
 macro_rules! log_info {
     ($($arg:tt)*) => {{
@@ -42,7 +42,7 @@ fn print_help() {
         r#"Morph - Lightweight, Offline-First Universal File Utility (v{})
 
 USAGE:
-    morph convert <file> --to <format> [options]
+    morph convert <files...> --to <format> [options]
     morph merge <files...> [--output <path>] [options]
     morph pdf rotate <file> --degrees <90|180|270> [--pages <1,2,...>]
     morph pdf delete <file> --pages <1,2,...>
@@ -60,6 +60,7 @@ OPTIONS:
 
 EXAMPLES:
     morph convert document.png --to pdf
+    morph convert page1.png page2.jpg page3.webp --to pdf
     morph convert document.docx --to pdf
     morph convert photo.png --to jpg --quality 90
     morph merge page1.png page2.jpg page3.png --output combined.pdf
@@ -102,20 +103,38 @@ fn main() {
     }
 }
 
+fn parse_output_arg(output_path: &Path) -> (Option<PathBuf>, Option<String>) {
+    if output_path.is_dir() {
+        (Some(output_path.to_path_buf()), None)
+    } else if output_path.extension().is_some() {
+        let parent = output_path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .filter(|p| !p.as_os_str().is_empty());
+        let file_name = output_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string());
+        (parent, file_name)
+    } else {
+        (Some(output_path.to_path_buf()), None)
+    }
+}
+
 fn handle_convert(args: &[String]) {
     if args.is_empty() {
         log_err!("Error: Missing input file path.");
         std::process::exit(1);
     }
 
-    let input_path = PathBuf::from(&args[0]);
+    let mut raw_inputs = Vec::new();
     let mut target_ext = String::new();
     let mut quality = None;
     let mut overwrite = false;
     let mut custom_output = None;
     let mut notify = true;
 
-    let mut i = 1;
+    let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--to" => {
@@ -138,9 +157,18 @@ fn handle_convert(args: &[String]) {
             }
             "--overwrite" => overwrite = true,
             "--no-notify" => notify = false,
-            _ => {}
+            other => {
+                if !other.starts_with("--") {
+                    raw_inputs.push(PathBuf::from(other));
+                }
+            }
         }
         i += 1;
+    }
+
+    if raw_inputs.is_empty() {
+        log_err!("Error: Missing input file path.");
+        std::process::exit(1);
     }
 
     if target_ext.is_empty() {
@@ -156,61 +184,129 @@ fn handle_convert(args: &[String]) {
         }
     };
 
-    let source_format = match detect_format_from_path(&input_path) {
-        Ok(f) => f,
-        Err(e) => {
-            log_err!("Error detecting input format: {}", e);
-            if notify {
-                Notifier::send_notification("Morph Conversion Failed", &format!("{}", e));
+    // If single file input and target is PDF, check for Windows Explorer multi-select batch coordination
+    let input_paths = if raw_inputs.len() == 1 && target_format == Format::Pdf {
+        match coordinate_batch(&raw_inputs[0], "convert_pdf") {
+            Some(batch) => batch,
+            None => {
+                // Sibling process in Explorer multi-select batch: file has been queued for leader.
+                std::process::exit(0);
             }
-            std::process::exit(1);
         }
+    } else {
+        raw_inputs
+    };
+
+    let (custom_dir, custom_file) = match custom_output {
+        Some(ref p) => parse_output_arg(p),
+        None => (None, None),
     };
 
     let output_options = OutputOptions {
-        custom_output_dir: custom_output,
+        custom_output_dir: custom_dir,
         overwrite,
-        custom_filename: None,
+        custom_filename: custom_file,
     };
 
-    log_info!(
-        "Converting '{}' ({}) -> {}...",
-        input_path.display(),
-        source_format,
-        target_format
-    );
-
-    let result = if target_format == Format::Pdf {
-        match source_format {
-            Format::Docx | Format::Doc | Format::Odt | Format::Rtf | Format::Txt => {
-                morph_core::DocumentEngine::convert_to_pdf(&input_path, &output_options)
-            }
-            _ => ImageEngine::images_to_pdf(std::slice::from_ref(&input_path), &output_options),
+    // If target is PDF and we have multiple files (either from CLI or Explorer batch), merge them!
+    if target_format == Format::Pdf && input_paths.len() > 1 {
+        log_info!(
+            "Merging {} files into a single PDF document in selection order...",
+            input_paths.len()
+        );
+        for (idx, p) in input_paths.iter().enumerate() {
+            log_info!("  [{}] {}", idx + 1, p.display());
         }
-    } else {
-        ImageEngine::convert_image(&input_path, &target_format, quality, &output_options)
-    };
 
-    match result {
-        Ok(out_path) => {
-            log_info!("Success: Generated '{}'", out_path.display());
-            if notify {
-                let file_name = out_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("output");
-                Notifier::send_notification(
-                    "Morph - Conversion Complete",
-                    &format!("Saved to {}", file_name),
+        match PdfEngine::merge_all_files(&input_paths, &output_options) {
+            Ok(out_path) => {
+                log_info!("Success: Generated '{}'", out_path.display());
+                if notify {
+                    let file_name = out_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("merged.pdf");
+                    Notifier::send_notification(
+                        "Morph - Merge Complete",
+                        &format!("Merged {} files into {}", input_paths.len(), file_name),
+                    );
+                }
+            }
+            Err(e) => {
+                log_err!("Conversion error: {}", e);
+                if notify {
+                    Notifier::send_notification("Morph - Conversion Failed", &format!("{}", e));
+                }
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // Otherwise, process each file
+    for input_path in &input_paths {
+        let source_format = match detect_format_from_path(input_path) {
+            Ok(f) => f,
+            Err(e) => {
+                log_err!(
+                    "Error detecting input format for '{}': {}",
+                    input_path.display(),
+                    e
                 );
+                if notify {
+                    Notifier::send_notification("Morph Conversion Failed", &format!("{}", e));
+                }
+                if input_paths.len() == 1 {
+                    std::process::exit(1);
+                }
+                continue;
             }
-        }
-        Err(e) => {
-            log_err!("Conversion error: {}", e);
-            if notify {
-                Notifier::send_notification("Morph - Conversion Failed", &format!("{}", e));
+        };
+
+        log_info!(
+            "Converting '{}' ({}) -> {}...",
+            input_path.display(),
+            source_format,
+            target_format
+        );
+
+        let result = if target_format == Format::Pdf {
+            match source_format {
+                Format::Docx | Format::Doc | Format::Odt | Format::Rtf | Format::Txt => {
+                    morph_core::DocumentEngine::convert_to_pdf(input_path, &output_options)
+                }
+                Format::Pdf => {
+                    PdfEngine::merge_all_files(std::slice::from_ref(input_path), &output_options)
+                }
+                _ => ImageEngine::images_to_pdf(std::slice::from_ref(input_path), &output_options),
             }
-            std::process::exit(1);
+        } else {
+            ImageEngine::convert_image(input_path, &target_format, quality, &output_options)
+        };
+
+        match result {
+            Ok(out_path) => {
+                log_info!("Success: Generated '{}'", out_path.display());
+                if notify {
+                    let file_name = out_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("output");
+                    Notifier::send_notification(
+                        "Morph - Conversion Complete",
+                        &format!("Saved to {}", file_name),
+                    );
+                }
+            }
+            Err(e) => {
+                log_err!("Conversion error for '{}': {}", input_path.display(), e);
+                if notify {
+                    Notifier::send_notification("Morph - Conversion Failed", &format!("{}", e));
+                }
+                if input_paths.len() == 1 {
+                    std::process::exit(1);
+                }
+            }
         }
     }
 }
@@ -221,7 +317,7 @@ fn handle_merge(args: &[String]) {
         std::process::exit(1);
     }
 
-    let mut input_paths = Vec::new();
+    let mut raw_inputs = Vec::new();
     let mut custom_output = None;
     let mut overwrite = false;
     let mut notify = true;
@@ -239,43 +335,47 @@ fn handle_merge(args: &[String]) {
             "--no-notify" => notify = false,
             other => {
                 if !other.starts_with("--") {
-                    input_paths.push(PathBuf::from(other));
+                    raw_inputs.push(PathBuf::from(other));
                 }
             }
         }
         i += 1;
     }
 
-    if input_paths.is_empty() {
+    if raw_inputs.is_empty() {
         log_err!("Error: No valid input files specified.");
         std::process::exit(1);
     }
 
-    let output_options = OutputOptions {
-        custom_output_dir: None,
-        overwrite,
-        custom_filename: custom_output
-            .as_ref()
-            .and_then(|p| p.to_str())
-            .map(|s| s.to_string()),
-    };
-
-    // Determine whether merging images or PDFs
-    let first_fmt = match detect_format_from_path(&input_paths[0]) {
-        Ok(f) => f,
-        Err(e) => {
-            log_err!("Error: {}", e);
-            std::process::exit(1);
+    let input_paths = if raw_inputs.len() == 1 {
+        match coordinate_batch(&raw_inputs[0], "merge") {
+            Some(batch) => batch,
+            None => std::process::exit(0),
         }
+    } else {
+        raw_inputs
     };
 
-    let result = if first_fmt == Format::Pdf {
-        log_info!("Merging {} PDF documents...", input_paths.len());
-        PdfEngine::merge_pdfs(&input_paths, &output_options)
-    } else {
-        log_info!("Combining {} images into PDF...", input_paths.len());
-        ImageEngine::images_to_pdf(&input_paths, &output_options)
+    let (custom_dir, custom_file) = match custom_output {
+        Some(ref p) => parse_output_arg(p),
+        None => (None, None),
     };
+
+    let output_options = OutputOptions {
+        custom_output_dir: custom_dir,
+        overwrite,
+        custom_filename: custom_file,
+    };
+
+    log_info!(
+        "Merging {} files into single PDF in selection order...",
+        input_paths.len()
+    );
+    for (idx, p) in input_paths.iter().enumerate() {
+        log_info!("  [{}] {}", idx + 1, p.display());
+    }
+
+    let result = PdfEngine::merge_all_files(&input_paths, &output_options);
 
     match result {
         Ok(out_path) => {
@@ -287,7 +387,7 @@ fn handle_merge(args: &[String]) {
                     .unwrap_or("merged.pdf");
                 Notifier::send_notification(
                     "Morph - Merge Complete",
-                    &format!("Saved to {}", name),
+                    &format!("Merged {} files into {}", input_paths.len(), name),
                 );
             }
         }
@@ -427,18 +527,27 @@ fn handle_edit(args: &[String]) {
         log_err!("Error: Missing file path for editor.");
         std::process::exit(1);
     }
-    let file_path = PathBuf::from(&args[0]);
+    let raw_path = PathBuf::from(&args[0]);
+
+    let file_paths = match coordinate_batch(&raw_path, "edit") {
+        Some(batch) => batch,
+        None => std::process::exit(0),
+    };
 
     // Check if morph-ui executable exists beside current executable
     let current_exe = env::current_exe().unwrap_or_else(|_| PathBuf::from("morph.exe"));
     let ui_exe = current_exe.with_file_name("morph-ui.exe");
 
     if ui_exe.exists() {
-        let _ = std::process::Command::new(ui_exe).arg(&file_path).spawn();
+        let mut cmd = std::process::Command::new(ui_exe);
+        for p in &file_paths {
+            cmd.arg(p);
+        }
+        let _ = cmd.spawn();
     } else {
         log_info!(
-            "Morph Editor requested for '{}'. (Popup UI will open when morph-ui is built)",
-            file_path.display()
+            "Morph Editor requested for {} file(s). (Popup UI will open when morph-ui is built)",
+            file_paths.len()
         );
     }
 }
@@ -449,7 +558,7 @@ fn handle_register() {
             log_info!(
                 "Success: Morph context menu successfully registered in Windows File Explorer."
             );
-            log_info!("Right-click any supported image (.png, .jpg, .webp, .bmp, .tiff) or PDF to access Morph actions!");
+            log_info!("Right-click any supported image (.png, .jpg, .webp, .bmp, .tiff), document (.docx, .doc, .rtf, .odt), or PDF to access Morph actions!");
         }
         Err(e) => {
             log_err!("Failed to register context menu: {}", e);

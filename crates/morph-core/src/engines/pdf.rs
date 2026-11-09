@@ -1,4 +1,5 @@
 use crate::error::{MorphError, Result};
+use crate::format::{Format, FormatCategory};
 use crate::output::{OutputManager, OutputOptions};
 use lopdf::{Document, Object};
 use std::path::{Path, PathBuf};
@@ -310,6 +311,8 @@ impl PdfEngine {
             return Err(MorphError::InvalidInput("No pages provided for document assembly".into()));
         }
 
+        let destination = OutputManager::resolve_destination(&pages[0].source_path, "pdf", output_options)?;
+
         let temp_dir = tempfile::tempdir()?;
         let temp_dir_path = temp_dir.path();
         let mut temp_pdf_paths = Vec::new();
@@ -366,8 +369,105 @@ impl PdfEngine {
             }
         }
 
-        // Merge all single page PDFs into final destination
-        Self::merge_pdfs(&temp_pdf_paths, output_options)
+        // Merge all single page PDFs directly to target destination
+        let final_opts = OutputOptions {
+            custom_output_dir: destination.parent().map(|p| p.to_path_buf()),
+            overwrite: true,
+            custom_filename: destination.file_name().and_then(|n| n.to_str()).map(|s| s.to_string()),
+        };
+        Self::merge_pdfs(&temp_pdf_paths, &final_opts)
+    }
+
+    /// Merges an arbitrary list of files (PDFs, images, documents) into a single PDF document in the specified order.
+    pub fn merge_all_files(input_paths: &[PathBuf], output_options: &OutputOptions) -> Result<PathBuf> {
+        if input_paths.is_empty() {
+            return Err(MorphError::InvalidInput("No input files provided for merge".into()));
+        }
+
+        if input_paths.len() == 1 {
+            let fmt = crate::detection::detect_format_from_path(&input_paths[0])
+                .unwrap_or(Format::Pdf);
+            if fmt == Format::Pdf {
+                return Self::merge_pdfs(input_paths, output_options);
+            } else if fmt.category() == FormatCategory::Image {
+                return crate::engines::image::ImageEngine::images_to_pdf(input_paths, output_options);
+            } else {
+                return crate::engines::document::DocumentEngine::convert_to_pdf(&input_paths[0], output_options);
+            }
+        }
+
+        // Check if all files are images or all files are PDFs
+        let mut all_images = true;
+        let mut all_pdfs = true;
+
+        for p in input_paths {
+            let fmt = crate::detection::detect_format_from_path(p)
+                .unwrap_or(Format::Pdf);
+            if fmt.category() != FormatCategory::Image {
+                all_images = false;
+            }
+            if fmt != Format::Pdf {
+                all_pdfs = false;
+            }
+        }
+
+        if all_images {
+            return crate::engines::image::ImageEngine::images_to_pdf(input_paths, output_options);
+        }
+
+        if all_pdfs {
+            return Self::merge_pdfs(input_paths, output_options);
+        }
+
+        // Mixed files: assemble using PageSpec
+        let mut specs = Vec::new();
+        let temp_dir = tempfile::tempdir()?;
+        let mut _temp_converted_pdfs = Vec::new();
+
+        for (i, p) in input_paths.iter().enumerate() {
+            let fmt = crate::detection::detect_format_from_path(p)
+                .unwrap_or(Format::Pdf);
+
+            if fmt == Format::Pdf {
+                let count = Self::page_count(p)?;
+                for page_num in 1..=count as u32 {
+                    specs.push(PageSpec {
+                        source_path: p.clone(),
+                        page_number: page_num,
+                        is_image: false,
+                        rotation: 0,
+                    });
+                }
+            } else if fmt.category() == FormatCategory::Image {
+                specs.push(PageSpec {
+                    source_path: p.clone(),
+                    page_number: 1,
+                    is_image: true,
+                    rotation: 0,
+                });
+            } else {
+                // Document format (DOCX, etc.): convert to temp PDF first
+                let temp_pdf = temp_dir.path().join(format!("doc_{:04}.pdf", i));
+                let temp_opts = OutputOptions {
+                    overwrite: true,
+                    custom_output_dir: Some(temp_dir.path().to_path_buf()),
+                    custom_filename: Some(format!("doc_{:04}.pdf", i)),
+                };
+                let converted = crate::engines::document::DocumentEngine::convert_to_pdf(p, &temp_opts)?;
+                let count = Self::page_count(&converted)?;
+                for page_num in 1..=count as u32 {
+                    specs.push(PageSpec {
+                        source_path: temp_pdf.clone(),
+                        page_number: page_num,
+                        is_image: false,
+                        rotation: 0,
+                    });
+                }
+                _temp_converted_pdfs.push(converted);
+            }
+        }
+
+        Self::assemble_document(&specs, output_options)
     }
 }
 
